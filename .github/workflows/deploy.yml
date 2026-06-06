@@ -37,7 +37,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --minify --tag "v$APP_VERSION" --message "$DEPLOY_MESSAGE"
-        env:
-          APP_VERSION: ${{ steps.info.outputs.version }}
-          DEPLOY_MESSAGE: ${{ steps.info.outputs.commit_msg }}
+          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}"
