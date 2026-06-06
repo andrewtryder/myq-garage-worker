@@ -6,4 +6,7 @@
   "observability": {
     "enabled": true,
   },
+  "vars": {
+    "VERSION": "0.1.0", // x-release-please-version
+  },
 }
