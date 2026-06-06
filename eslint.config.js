@@ -10,6 +10,13 @@ export default ts.config(
   ...ts.configs.recommended,
   prettier,
   {
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        fetch: 'readonly',
+        globalThis: 'readonly',
+      },
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
