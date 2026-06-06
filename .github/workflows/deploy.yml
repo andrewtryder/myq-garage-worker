@@ -1,0 +1,43 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get Version and Commit Message
+        id: info
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          COMMIT_MSG=$(git log -1 --pretty=%B | tr '\r\n' ' ' | tr '\n' ' ' | xargs)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --minify --tag "v$APP_VERSION" --message "$DEPLOY_MESSAGE"
+        env:
+          APP_VERSION: ${{ steps.info.outputs.version }}
+          DEPLOY_MESSAGE: ${{ steps.info.outputs.commit_msg }}

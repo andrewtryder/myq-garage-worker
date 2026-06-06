@@ -1,0 +1,39 @@
+{
+  "name": "myq-garage-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --remote",
+    "dev:local": "wrangler dev",
+    "deploy": "wrangler deploy --minify --tag v$(node -p \"require('./package.json').version\") --message \"Local deployment of v$(node -p \"require('./package.json').version\")\"",
+    "types": "wrangler types --env-interface CloudflareBindings",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260530.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.60.1",
+    "wrangler": "^4.4.0"
+  },
+  "lint-staged": {
+    "*.{js,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,jsonc}": [
+      "prettier --write"
+    ]
+  }
+}
