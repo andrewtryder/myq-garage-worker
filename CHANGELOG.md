@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.1...myq-garage-worker-v0.1.2) (2026-06-06)
+
+
+### Features
+
+* add send-test-email simulation script for local testing ([e1c1e02](https://github.com/andrewtryder/myq-garage-worker/commit/e1c1e02709c717ea796e23324f1f80f0bf20dd7c))
+* modularize index.ts and add unit tests ([0e0103e](https://github.com/andrewtryder/myq-garage-worker/commit/0e0103e372183216500f886397ca739ed64dfba4))
+
+
+### Bug Fixes
+
+* **ci:** fix deploy workflow environment variable expansion in wrangler command ([48559a1](https://github.com/andrewtryder/myq-garage-worker/commit/48559a1751174536caa24380a93230901541a701))
+
 ## [0.1.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.0...myq-garage-worker-v0.1.1) (2026-06-06)
 
 ### Features
