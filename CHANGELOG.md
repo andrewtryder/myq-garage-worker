@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.2...myq-garage-worker-v0.1.3) (2026-06-07)
+
+
+### Features
+
+* replace Adafruit IO with Cloudflare KV storage and implement state change history timeline ([631ff0b](https://github.com/andrewtryder/myq-garage-worker/commit/631ff0b3c52f29aa58613c99c49247162c16c000))
+
+
+### Bug Fixes
+
+* **config:** correct Cloudflare KV namespace ID in wrangler.jsonc ([9d20795](https://github.com/andrewtryder/myq-garage-worker/commit/9d20795436d77a7ac682e186158ac837c5d22aa5))
+
 ## [0.1.2](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.1...myq-garage-worker-v0.1.2) (2026-06-06)
 
 ### Features
