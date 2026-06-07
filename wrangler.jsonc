@@ -12,7 +12,7 @@
   "kv_namespaces": [
     {
       "binding": "GARAGE_STATE",
-      "id": "garage-state-kv",
+      "id": "32229217bf964d418300c81068b84447",
     },
   ],
 }
