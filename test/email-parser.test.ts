@@ -1,11 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
 import { parseMyQSubject, resolveFeedKey, mapActionToStatus } from '../src/email-parser';
 import { Env } from '../src/types';
 
 describe('email-parser unit tests', () => {
   const mockEnv: Env = {
-    ADAFRUIT_USERNAME: 'test-user',
-    ADAFRUIT_IO_KEY: 'test-key',
+    GARAGE_STATE: {} as any,
     GARAGE_LEFT_FEED: 'left-feed-key',
     GARAGE_RIGHT_FEED: 'right-feed-key',
   };

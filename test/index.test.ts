@@ -2,20 +2,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import worker, { Env } from '../src/index';
 
-describe('myq-garage-worker tests', () => {
+describe('myq-garage-worker integration tests', () => {
   let mockEnv: Env;
-  let fetchMock: any;
+  let mockKV: any;
+  let kvStore: Map<string, string>;
 
   beforeEach(() => {
+    kvStore = new Map<string, string>();
+    mockKV = {
+      put: vi.fn(async (key: string, val: string) => {
+        kvStore.set(key, val);
+      }),
+      get: vi.fn(async (key: string) => {
+        return kvStore.get(key) || null;
+      }),
+    };
+
     mockEnv = {
-      ADAFRUIT_USERNAME: 'test-user',
-      ADAFRUIT_IO_KEY: 'test-key',
+      GARAGE_STATE: mockKV,
       GARAGE_LEFT_FEED: 'left-feed',
       GARAGE_RIGHT_FEED: 'right-feed',
     };
-
-    fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
   });
 
   afterEach(() => {
@@ -36,14 +43,10 @@ describe('myq-garage-worker tests', () => {
 
       await worker.email(mockMessage, mockEnv, {} as any);
       expect(logSpy).toHaveBeenCalledWith('Not a MyQ email, ignoring');
+      expect(mockKV.put).not.toHaveBeenCalled();
     });
 
     it('processes Right Garage Door opened events', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: async () => 'OK',
-      });
-
       const mockMessage = {
         headers: {
           get: vi.fn((key) => {
@@ -56,21 +59,15 @@ describe('myq-garage-worker tests', () => {
 
       await worker.email(mockMessage, mockEnv, {} as any);
 
-      // Verify fetch was called with Adafruit URL and POST method
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, options] = fetchMock.mock.calls[0];
-      expect(url).toBe('https://io.adafruit.com/api/v2/test-user/feeds/right-feed/data');
-      expect(options.method).toBe('POST');
-      expect(JSON.parse(options.body)).toEqual({ value: 'OPEN' });
-      expect(options.headers['X-AIO-Key']).toBe('test-key');
+      // Verify KV put was called
+      expect(mockKV.put).toHaveBeenCalledWith('right-feed', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:right-feed', expect.any(String));
+
+      const parsed = JSON.parse(kvStore.get('right-feed') || '');
+      expect(parsed.value).toBe('OPEN');
     });
 
     it('processes Left Garage Door closed events', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: async () => 'OK',
-      });
-
       const mockMessage = {
         headers: {
           get: vi.fn((key) => {
@@ -83,25 +80,33 @@ describe('myq-garage-worker tests', () => {
 
       await worker.email(mockMessage, mockEnv, {} as any);
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, options] = fetchMock.mock.calls[0];
-      expect(url).toBe('https://io.adafruit.com/api/v2/test-user/feeds/left-feed/data');
-      expect(options.method).toBe('POST');
-      expect(JSON.parse(options.body)).toEqual({ value: 'CLOSED' });
+      expect(mockKV.put).toHaveBeenCalledWith('left-feed', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:left-feed', expect.any(String));
+
+      const parsed = JSON.parse(kvStore.get('left-feed') || '');
+      expect(parsed.value).toBe('CLOSED');
     });
   });
 
   describe('HTTP Fetch Handler', () => {
-    it('returns the HTML status page with current values', async () => {
-      // Mock two GET requests to Adafruit
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ value: 'OPEN', created_at: '2026-06-06T10:00:00Z' }),
-      });
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ value: 'CLOSED', created_at: '2026-06-06T10:05:00Z' }),
-      });
+    it('returns the HTML status page with current values and history timeline', async () => {
+      // Populate mock KV storage
+      kvStore.set(
+        'right-feed',
+        JSON.stringify({ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }),
+      );
+      kvStore.set(
+        'left-feed',
+        JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }),
+      );
+      kvStore.set(
+        'history:right-feed',
+        JSON.stringify([{ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }]),
+      );
+      kvStore.set(
+        'history:left-feed',
+        JSON.stringify([{ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }]),
+      );
 
       const request = new Request('https://myq-garage-worker.mrcoffee.workers.dev/');
       const response = await worker.fetch(request, mockEnv, {} as any);
@@ -116,6 +121,40 @@ describe('myq-garage-worker tests', () => {
       expect(html).toContain('CLOSED');
       expect(html).toContain('2026-06-06T10:00:00Z');
       expect(html).toContain('2026-06-06T10:05:00Z');
+      expect(html).toContain('Recent Activity Log');
+    });
+
+    it('returns JSON data including history when search parameter json=true is present', async () => {
+      kvStore.set(
+        'right-feed',
+        JSON.stringify({ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }),
+      );
+      kvStore.set(
+        'left-feed',
+        JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }),
+      );
+      kvStore.set(
+        'history:right-feed',
+        JSON.stringify([{ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }]),
+      );
+      kvStore.set(
+        'history:left-feed',
+        JSON.stringify([{ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }]),
+      );
+
+      const request = new Request('https://myq-garage-worker.mrcoffee.workers.dev/?json=true');
+      const response = await worker.fetch(request, mockEnv, {} as any);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+
+      const body = await response.json();
+      expect(body.right).toEqual({ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' });
+      expect(body.left).toEqual({ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' });
+      expect(body.history).toEqual([
+        { value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z', door: 'left' },
+        { value: 'OPEN', createdAt: '2026-06-06T10:00:00Z', door: 'right' },
+      ]);
     });
   });
 });

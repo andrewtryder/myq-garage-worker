@@ -1,6 +1,7 @@
-export interface DoorState {
-  value: string;
-  createdAt: string;
+import { DoorState } from './types';
+
+export interface HistoryEntry extends DoorState {
+  door: 'left' | 'right';
 }
 
 export function statusColor(value: string): string {
@@ -22,11 +23,53 @@ export function statusLabel(value: string | undefined): string {
   return value.toUpperCase();
 }
 
-export function renderStatusPage(rightDoor: DoorState | null, leftDoor: DoorState | null): string {
+export function renderStatusPage(
+  rightDoor: DoorState | null,
+  leftDoor: DoorState | null,
+  history: HistoryEntry[] = [],
+): string {
   const rightValue = rightDoor?.value || '';
   const rightTime = rightDoor?.createdAt || 'N/A';
   const leftValue = leftDoor?.value || '';
   const leftTime = leftDoor?.createdAt || 'N/A';
+
+  const historyHtml =
+    history.length === 0
+      ? `<div class="empty-history">No recent activity recorded.</div>`
+      : history
+          .map((entry) => {
+            const doorLabel = entry.door === 'right' ? 'Garage Door Right' : 'Garage Door Left';
+            const statusUpper = entry.value.toUpperCase();
+            const doorClass =
+              statusUpper === 'OPEN'
+                ? 'status-open'
+                : statusUpper === 'CLOSED'
+                  ? 'status-closed'
+                  : statusUpper === 'STOPPED'
+                    ? 'status-stopped'
+                    : 'status-unknown';
+
+            const actionClass =
+              statusUpper === 'OPEN'
+                ? 'action-open'
+                : statusUpper === 'CLOSED'
+                  ? 'action-closed'
+                  : statusUpper === 'STOPPED'
+                    ? 'action-stopped'
+                    : 'action-unknown';
+
+            return `
+        <div class="timeline-item">
+          <div class="timeline-marker ${doorClass}"></div>
+          <div class="timeline-content">
+            <span class="timeline-door">${doorLabel}</span>
+            <span class="timeline-action ${actionClass}">${statusLabel(entry.value)}</span>
+            <span class="timeline-time">${entry.createdAt || 'N/A'}</span>
+          </div>
+        </div>
+      `;
+          })
+          .join('\n');
 
   return `
 <!doctype html>
@@ -101,13 +144,90 @@ export function renderStatusPage(rightDoor: DoorState | null, leftDoor: DoorStat
     .status-closed { background-color: ${statusColor('CLOSED')}; }
     .status-stopped{ background-color: ${statusColor('STOPPED')}; }
     .status-unknown{ background-color: ${statusColor('UNKNOWN')}; }
+
+    /* History Log Timeline CSS */
+    .history-card {
+      margin-top: 24px;
+    }
+    .timeline {
+      margin-top: 16px;
+      position: relative;
+      padding-left: 20px;
+      border-left: 2px solid rgba(148, 163, 184, 0.15);
+    }
+    .timeline-item {
+      position: relative;
+      margin-bottom: 16px;
+    }
+    .timeline-item:last-child {
+      margin-bottom: 0;
+    }
+    .timeline-marker {
+      position: absolute;
+      left: -27px;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #0b1120;
+    }
+    .timeline-marker.status-open { background-color: ${statusColor('OPEN')}; box-shadow: 0 0 8px rgba(255, 77, 79, 0.4); }
+    .timeline-marker.status-closed { background-color: ${statusColor('CLOSED')}; box-shadow: 0 0 8px rgba(82, 196, 26, 0.4); }
+    .timeline-marker.status-stopped { background-color: ${statusColor('STOPPED')}; box-shadow: 0 0 8px rgba(250, 173, 20, 0.4); }
+    .timeline-marker.status-unknown { background-color: ${statusColor('UNKNOWN')}; }
+
+    .timeline-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .timeline-door {
+      font-weight: 500;
+      color: #e5e7eb;
+    }
+    .timeline-action {
+      font-weight: 600;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .action-open {
+      background: rgba(255, 77, 79, 0.15);
+      color: #ff4d4f;
+    }
+    .action-closed {
+      background: rgba(82, 196, 26, 0.15);
+      color: #52c41a;
+    }
+    .action-stopped {
+      background: rgba(250, 173, 20, 0.15);
+      color: #faad14;
+    }
+    .action-unknown {
+      background: rgba(140, 140, 140, 0.15);
+      color: #8c8c8c;
+    }
+    .timeline-time {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .empty-history {
+      color: #9ca3af;
+      font-size: 14px;
+      padding: 16px 0;
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <h1>Garage Door Status</h1>
     <div class="subtitle">
-      Source: MyQ email notifications → Cloudflare Email Worker → Adafruit IO feeds.
+      Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
     </div>
     <div class="grid">
       <div class="card">
@@ -148,6 +268,16 @@ export function renderStatusPage(rightDoor: DoorState | null, leftDoor: DoorStat
         <div class="meta">
           Last update: ${leftTime}
         </div>
+      </div>
+    </div>
+
+    <!-- History Log Section -->
+    <div class="card history-card">
+      <div class="card-header">
+        <div class="door-name">Recent Activity Log</div>
+      </div>
+      <div class="timeline">
+        ${historyHtml}
       </div>
     </div>
   </div>
