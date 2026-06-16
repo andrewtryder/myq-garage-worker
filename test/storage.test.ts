@@ -21,22 +21,22 @@ describe('storage KV tests', () => {
 
     mockEnv = {
       GARAGE_STATE: mockKV,
-      GARAGE_LEFT_FEED: 'left-feed',
-      GARAGE_RIGHT_FEED: 'right-feed',
+      GARAGE_LEFT_KEY: 'left-door',
+      GARAGE_RIGHT_KEY: 'right-door',
     };
   });
 
   it('saveDoorState saves serialized JSON object and appends to history', async () => {
-    await saveDoorState(mockEnv, 'left-feed', 'OPEN');
+    await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
     // 1. Check latest state
-    expect(mockKV.put).toHaveBeenCalledWith('left-feed', expect.any(String));
-    const parsedState = JSON.parse(store.get('left-feed') || '');
+    expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
+    const parsedState = JSON.parse(store.get('left-door') || '');
     expect(parsedState.value).toBe('OPEN');
 
     // 2. Check history log
-    expect(mockKV.put).toHaveBeenCalledWith('history:left-feed', expect.any(String));
-    const parsedHistory = JSON.parse(store.get('history:left-feed') || '[]');
+    expect(mockKV.put).toHaveBeenCalledWith('history:left-door', expect.any(String));
+    const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
     expect(parsedHistory).toHaveLength(1);
     expect(parsedHistory[0].value).toBe('OPEN');
     expect(new Date(parsedHistory[0].createdAt).getTime()).not.toBeNaN();
@@ -48,20 +48,20 @@ describe('storage KV tests', () => {
       value: 'CLOSED',
       createdAt: new Date(Date.now() - i * 1000).toISOString(),
     }));
-    store.set('history:left-feed', JSON.stringify(initialHistory));
+    store.set('history:left-door', JSON.stringify(initialHistory));
 
-    await saveDoorState(mockEnv, 'left-feed', 'OPEN');
+    await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
-    const parsedHistory = JSON.parse(store.get('history:left-feed') || '[]');
+    const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
     expect(parsedHistory).toHaveLength(20);
     expect(parsedHistory[0].value).toBe('OPEN'); // Newest is prepended
   });
 
   it('getDoorState retrieves and parses stored state', async () => {
     const rawState = JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T20:00:00.000Z' });
-    await mockKV.put('right-feed', rawState);
+    await mockKV.put('right-door', rawState);
 
-    const result = await getDoorState(mockEnv, 'right-feed');
+    const result = await getDoorState(mockEnv, 'right-door');
     expect(result).toEqual({
       value: 'CLOSED',
       createdAt: '2026-06-06T20:00:00.000Z',
@@ -81,9 +81,9 @@ describe('storage KV tests', () => {
       { value: 'OPEN', createdAt: '2026-06-06T20:00:00.000Z' },
       { value: 'CLOSED', createdAt: '2026-06-06T19:00:00.000Z' },
     ]);
-    store.set('history:right-feed', rawHistory);
+    store.set('history:right-door', rawHistory);
 
-    const result = await getDoorHistory(mockEnv, 'right-feed');
+    const result = await getDoorHistory(mockEnv, 'right-door');
     expect(result).toEqual([
       { value: 'OPEN', createdAt: '2026-06-06T20:00:00.000Z' },
       { value: 'CLOSED', createdAt: '2026-06-06T19:00:00.000Z' },

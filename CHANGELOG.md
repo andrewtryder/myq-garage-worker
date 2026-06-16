@@ -2,10 +2,9 @@
 
 ## [0.1.4](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.3...myq-garage-worker-v0.1.4) (2026-06-07)
 
-
 ### Bug Fixes
 
-* **config:** define GARAGE_LEFT_FEED and GARAGE_RIGHT_FEED variables in wrangler.jsonc ([f358205](https://github.com/andrewtryder/myq-garage-worker/commit/f358205b32ee6f4b1ad4a6b8e2f0d944c7b59d91))
+- **config:** define GARAGE_LEFT_FEED and GARAGE_RIGHT_FEED variables in wrangler.jsonc ([f358205](https://github.com/andrewtryder/myq-garage-worker/commit/f358205b32ee6f4b1ad4a6b8e2f0d944c7b59d91))
 
 ## [0.1.3](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.2...myq-garage-worker-v0.1.3) (2026-06-07)
 

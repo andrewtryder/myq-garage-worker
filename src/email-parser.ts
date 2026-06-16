@@ -19,11 +19,11 @@ export function parseMyQSubject(subject: string): MyQParsedSubject | null {
   };
 }
 
-export function resolveFeedKey(deviceName: string, env: Env): string | null {
+export function resolveDoorKey(deviceName: string, env: Env): string | null {
   if (/garage door right/i.test(deviceName)) {
-    return env.GARAGE_RIGHT_FEED;
+    return env.GARAGE_RIGHT_KEY;
   } else if (/garage door left/i.test(deviceName)) {
-    return env.GARAGE_LEFT_FEED;
+    return env.GARAGE_LEFT_KEY;
   }
   return null;
 }

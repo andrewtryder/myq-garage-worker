@@ -76,7 +76,7 @@ export function renderStatusPage(
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Garage Status – MyQ / Adafruit IO</title>
+  <title>Garage Status – MyQ / Cloudflare KV</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {

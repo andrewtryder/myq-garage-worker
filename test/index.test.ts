@@ -20,8 +20,8 @@ describe('myq-garage-worker integration tests', () => {
 
     mockEnv = {
       GARAGE_STATE: mockKV,
-      GARAGE_LEFT_FEED: 'left-feed',
-      GARAGE_RIGHT_FEED: 'right-feed',
+      GARAGE_LEFT_KEY: 'left-door',
+      GARAGE_RIGHT_KEY: 'right-door',
     };
   });
 
@@ -60,10 +60,10 @@ describe('myq-garage-worker integration tests', () => {
       await worker.email(mockMessage, mockEnv, {} as any);
 
       // Verify KV put was called
-      expect(mockKV.put).toHaveBeenCalledWith('right-feed', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:right-feed', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('right-door', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:right-door', expect.any(String));
 
-      const parsed = JSON.parse(kvStore.get('right-feed') || '');
+      const parsed = JSON.parse(kvStore.get('right-door') || '');
       expect(parsed.value).toBe('OPEN');
     });
 
@@ -80,10 +80,10 @@ describe('myq-garage-worker integration tests', () => {
 
       await worker.email(mockMessage, mockEnv, {} as any);
 
-      expect(mockKV.put).toHaveBeenCalledWith('left-feed', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:left-feed', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:left-door', expect.any(String));
 
-      const parsed = JSON.parse(kvStore.get('left-feed') || '');
+      const parsed = JSON.parse(kvStore.get('left-door') || '');
       expect(parsed.value).toBe('CLOSED');
     });
   });
@@ -92,19 +92,19 @@ describe('myq-garage-worker integration tests', () => {
     it('returns the HTML status page with current values and history timeline', async () => {
       // Populate mock KV storage
       kvStore.set(
-        'right-feed',
+        'right-door',
         JSON.stringify({ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }),
       );
       kvStore.set(
-        'left-feed',
+        'left-door',
         JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }),
       );
       kvStore.set(
-        'history:right-feed',
+        'history:right-door',
         JSON.stringify([{ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }]),
       );
       kvStore.set(
-        'history:left-feed',
+        'history:left-door',
         JSON.stringify([{ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }]),
       );
 
@@ -126,19 +126,19 @@ describe('myq-garage-worker integration tests', () => {
 
     it('returns JSON data including history when search parameter json=true is present', async () => {
       kvStore.set(
-        'right-feed',
+        'right-door',
         JSON.stringify({ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }),
       );
       kvStore.set(
-        'left-feed',
+        'left-door',
         JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }),
       );
       kvStore.set(
-        'history:right-feed',
+        'history:right-door',
         JSON.stringify([{ value: 'OPEN', createdAt: '2026-06-06T10:00:00Z' }]),
       );
       kvStore.set(
-        'history:left-feed',
+        'history:left-door',
         JSON.stringify([{ value: 'CLOSED', createdAt: '2026-06-06T10:05:00Z' }]),
       );
 

@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { getDoorState, saveDoorState, getDoorHistory } from './storage';
-import { mapActionToStatus, parseMyQSubject, resolveFeedKey } from './email-parser';
+import { mapActionToStatus, parseMyQSubject, resolveDoorKey } from './email-parser';
 import { renderStatusPage, HistoryEntry } from './status-page';
 
 export type { Env };
@@ -25,14 +25,14 @@ export default {
       }
 
       const { deviceName, action } = parsed;
-      const feedKey = resolveFeedKey(deviceName, env);
-      if (!feedKey) {
+      const doorKey = resolveDoorKey(deviceName, env);
+      if (!doorKey) {
         console.log('Unknown device name:', deviceName);
         return;
       }
 
       const value = mapActionToStatus(action);
-      await saveDoorState(env, feedKey, value);
+      await saveDoorState(env, doorKey, value);
     } catch (err) {
       console.error('Error handling MyQ email:', err);
     }
@@ -42,10 +42,10 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     try {
       const [right, left, rightHistory, leftHistory] = await Promise.all([
-        getDoorState(env, env.GARAGE_RIGHT_FEED),
-        getDoorState(env, env.GARAGE_LEFT_FEED),
-        getDoorHistory(env, env.GARAGE_RIGHT_FEED),
-        getDoorHistory(env, env.GARAGE_LEFT_FEED),
+        getDoorState(env, env.GARAGE_RIGHT_KEY),
+        getDoorState(env, env.GARAGE_LEFT_KEY),
+        getDoorHistory(env, env.GARAGE_RIGHT_KEY),
+        getDoorHistory(env, env.GARAGE_LEFT_KEY),
       ]);
 
       // Merge and sort histories descending by timestamp

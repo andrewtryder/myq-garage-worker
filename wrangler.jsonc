@@ -8,8 +8,8 @@
   },
   "vars": {
     "VERSION": "0.1.4", // x-release-please-version
-    "GARAGE_LEFT_FEED": "garage-left",
-    "GARAGE_RIGHT_FEED": "garage-right",
+    "GARAGE_LEFT_KEY": "garage-left",
+    "GARAGE_RIGHT_KEY": "garage-right",
   },
   "kv_namespaces": [
     {
