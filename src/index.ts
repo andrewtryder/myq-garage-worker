@@ -5,6 +5,26 @@ import { renderStatusPage, HistoryEntry, DoorData } from './status-page';
 
 export type { Env };
 
+function isAuthorized(request: Request, env: Env): boolean {
+  if (!env.API_KEY) {
+    return true; // No API key configured, leave unprotected
+  }
+
+  const url = new URL(request.url);
+  const queryKey = url.searchParams.get('key');
+  if (queryKey === env.API_KEY) return true;
+
+  const headerKey = request.headers.get('x-api-key');
+  if (headerKey === env.API_KEY) return true;
+
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader && authHeader.replace(/^Bearer\s+/i, '').trim() === env.API_KEY) {
+    return true;
+  }
+
+  return false;
+}
+
 export default {
   // Handles incoming emails from Cloudflare Email Routing
   async email(message: ForwardableEmailMessage, env: Env, _ctx: ExecutionContext): Promise<void> {
@@ -40,6 +60,10 @@ export default {
 
   // HTTP handler – serves a status page or raw JSON at your workers.dev URL
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    if (!isAuthorized(request, env)) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
     try {
       let configuredDoors: Record<string, string> = {};
 

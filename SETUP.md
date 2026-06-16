@@ -65,3 +65,12 @@ Finally, you need to forward the notifications from your personal email to the C
 6. Click **Create filter**.
 
 You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your public status dashboard!
+
+## 5. (Optional) Protect your dashboard with an API Key
+
+To restrict access to the web dashboard, create a secret `API_KEY`.
+
+- _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
+- _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.
+
+Once configured, you must access your dashboard URL by appending the key: `https://your-worker.workers.dev/?key=YOUR_API_KEY`.

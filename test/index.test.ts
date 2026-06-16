@@ -135,4 +135,41 @@ describe('myq-garage-worker integration tests', () => {
       expect(json.history).toBeInstanceOf(Array);
     });
   });
+  describe('Fetch Handler (Auth)', () => {
+    const mockEnvAuth: any = {
+      get GARAGE_STATE() {
+        return mockKV;
+      },
+      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      API_KEY: 'super-secret',
+    };
+
+    it('returns 401 when API_KEY is set but not provided', async () => {
+      const req = new Request('https://worker.dev');
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(401);
+    });
+
+    it('allows access with query param ?key=', async () => {
+      const req = new Request('https://worker.dev?key=super-secret');
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(200);
+    });
+
+    it('allows access with x-api-key header', async () => {
+      const req = new Request('https://worker.dev', {
+        headers: { 'x-api-key': 'super-secret' },
+      });
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(200);
+    });
+
+    it('allows access with Authorization Bearer token', async () => {
+      const req = new Request('https://worker.dev', {
+        headers: { Authorization: 'Bearer super-secret' },
+      });
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(200);
+    });
+  });
 });

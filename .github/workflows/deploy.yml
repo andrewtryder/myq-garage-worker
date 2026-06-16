@@ -37,4 +37,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          secrets: |
+            API_KEY
           command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}" --var GARAGE_DOORS:'${{ vars.GARAGE_DOORS }}'
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
