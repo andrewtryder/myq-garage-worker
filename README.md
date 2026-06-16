@@ -2,6 +2,8 @@
 
 A Cloudflare Worker that integrates **myQ** notification emails and displays a clean, beautiful status dashboard. State is stored natively in Cloudflare KV.
 
+For a step-by-step guide on how to configure MyQ, Cloudflare, and email forwarding, please see the [Setup Guide](SETUP.md).
+
 ## Architecture
 
 This worker acts as two endpoints:
