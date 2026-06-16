@@ -23,21 +23,19 @@ If you are using this worker for personal use, it is highly recommended to prote
 
 ## Environment Variables / Configuration
 
-These variables must be configured in your `wrangler.jsonc` or via the Cloudflare dashboard:
+The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
 | Variable Name  | Description                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------- |
 | `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys. |
 
-Example `wrangler.jsonc` var configuration:
+**Example configuration:**
 
-```jsonc
-  "vars": {
-    "GARAGE_DOORS": {
-      "Garage Door Left": "garage-left",
-      "Garage Door Right": "garage-right"
-    }
-  }
+```json
+{
+  "Garage Door Left": "garage-left",
+  "Garage Door Right": "garage-right"
+}
 ```
 
 You also need to bind a KV Namespace to `GARAGE_STATE`. See `wrangler.jsonc` for details.

@@ -20,23 +20,19 @@ To feed data into the worker, we first need to instruct the MyQ app to send emai
    ```bash
    npm install
    ```
-3. Update your `wrangler.jsonc` file with your specific garage doors. You must map the exact name of the door from the MyQ app to a safe database key:
-   ```jsonc
-   "vars": {
-     "GARAGE_DOORS": {
-       "Garage Door Left": "garage-left",
-       "Garage Door Right": "garage-right"
-     }
-   }
-   ```
-4. Authenticate your local Wrangler CLI with Cloudflare:
+3. Authenticate your local Wrangler CLI with Cloudflare:
    ```bash
    npx wrangler login
    ```
-5. Deploy the worker to your Cloudflare account:
+4. To configure your specific garage doors locally and deploy, you can pass the configuration as a variable during deployment. You must map the exact name of the door from the MyQ app to a safe database key:
+
    ```bash
-   npm run deploy
+   npx wrangler deploy --var GARAGE_DOORS:'{"Garage Door Left": "garage-left", "Garage Door Right": "garage-right"}'
    ```
+
+   _Alternatively, if using GitHub Actions:_ Add `GARAGE_DOORS` as a Repository Variable (not a secret) in GitHub Settings -> Secrets and variables -> Actions.
+
+   _Alternatively, via Cloudflare Dashboard:_ After deploying once, go to your Worker -> Settings -> Variables and add `GARAGE_DOORS` there.
 
 ## 3. Configuring Cloudflare Email Routing
 
