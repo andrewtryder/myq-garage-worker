@@ -8,7 +8,10 @@
   },
   "vars": {
     "VERSION": "0.1.4", // x-release-please-version
-    "GARAGE_DOORS": ["Garage Door Left", "Garage Door Right"],
+    "GARAGE_DOORS": {
+      "Garage Door Left": "garage-left",
+      "Garage Door Right": "garage-right",
+    },
   },
   "kv_namespaces": [
     {

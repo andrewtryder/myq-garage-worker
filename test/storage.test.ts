@@ -20,7 +20,7 @@ describe('storage KV tests', () => {
 
     mockEnv = {
       GARAGE_STATE: mockKV,
-      GARAGE_DOORS: [],
+      GARAGE_DOORS: {},
     };
   });
 

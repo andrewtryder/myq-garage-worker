@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { getDoorState, saveDoorState, getDoorHistory } from './storage';
-import { mapActionToStatus, parseMyQSubject, resolveDoorKey, slugify } from './email-parser';
+import { mapActionToStatus, parseMyQSubject, resolveDoorKey } from './email-parser';
 import { renderStatusPage, HistoryEntry, DoorData } from './status-page';
 
 export type { Env };
@@ -41,20 +41,24 @@ export default {
   // HTTP handler – serves a status page or raw JSON at your workers.dev URL
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     try {
-      let configuredDoors: string[] = [];
+      let configuredDoors: Record<string, string> = {};
+
       if (typeof env.GARAGE_DOORS === 'string') {
         try {
           configuredDoors = JSON.parse(env.GARAGE_DOORS);
         } catch {
-          configuredDoors = [env.GARAGE_DOORS];
+          console.error('Failed to parse GARAGE_DOORS JSON string');
         }
-      } else if (Array.isArray(env.GARAGE_DOORS)) {
+      } else if (
+        typeof env.GARAGE_DOORS === 'object' &&
+        env.GARAGE_DOORS !== null &&
+        !Array.isArray(env.GARAGE_DOORS)
+      ) {
         configuredDoors = env.GARAGE_DOORS;
       }
 
       // Fetch state and history for all configured doors
-      const doorDataPromises = configuredDoors.map(async (doorName) => {
-        const doorKey = slugify(doorName);
+      const doorDataPromises = Object.entries(configuredDoors).map(async ([doorName, doorKey]) => {
         const [state, history] = await Promise.all([
           getDoorState(env, doorKey),
           getDoorHistory(env, doorKey),

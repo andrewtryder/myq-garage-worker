@@ -34,7 +34,7 @@ describe('myq-garage-worker integration tests', () => {
     it('processes Right Garage Door opened events', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: ['Garage Door Left', 'Garage Door Right'],
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const message: any = {
         headers: new Headers({
@@ -45,17 +45,17 @@ describe('myq-garage-worker integration tests', () => {
 
       await worker.email(message, mockEnv, {} as any);
 
-      expect(mockKV.put).toHaveBeenCalledWith('garage-door-right', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:garage-door-right', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('garage-right', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:garage-right', expect.any(String));
 
-      const parsed = JSON.parse(kvStore.get('garage-door-right') || '');
+      const parsed = JSON.parse(kvStore.get('garage-right') || '');
       expect(parsed.value).toBe('OPEN');
     });
 
     it('processes Left Garage Door closed events', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: ['Garage Door Left', 'Garage Door Right'],
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const message: any = {
         headers: new Headers({
@@ -66,10 +66,10 @@ describe('myq-garage-worker integration tests', () => {
 
       await worker.email(message, mockEnv, {} as any);
 
-      expect(mockKV.put).toHaveBeenCalledWith('garage-door-left', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:garage-door-left', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('garage-left', expect.any(String));
+      expect(mockKV.put).toHaveBeenCalledWith('history:garage-left', expect.any(String));
 
-      const parsed = JSON.parse(kvStore.get('garage-door-left') || '');
+      const parsed = JSON.parse(kvStore.get('garage-left') || '');
       expect(parsed.value).toBe('CLOSED');
     });
   });
@@ -78,7 +78,7 @@ describe('myq-garage-worker integration tests', () => {
     it('serves HTML status page by default for dynamically configured doors', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: ['Garage Door Left', 'Garage Door Right'],
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const req = new Request('https://worker.dev');
 
@@ -87,20 +87,20 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('text/html');
 
-      expect(mockKV.get).toHaveBeenCalledWith('garage-door-right');
-      expect(mockKV.get).toHaveBeenCalledWith('garage-door-left');
-      expect(mockKV.get).toHaveBeenCalledWith('history:garage-door-right');
-      expect(mockKV.get).toHaveBeenCalledWith('history:garage-door-left');
+      expect(mockKV.get).toHaveBeenCalledWith('garage-right');
+      expect(mockKV.get).toHaveBeenCalledWith('garage-left');
+      expect(mockKV.get).toHaveBeenCalledWith('history:garage-right');
+      expect(mockKV.get).toHaveBeenCalledWith('history:garage-left');
 
       const text = await response.text();
       expect(text).toContain('Garage Door Right');
       expect(text).toContain('Garage Door Left');
     });
 
-    it('serves HTML status page for single door JSON array string', async () => {
+    it('serves HTML status page for single door JSON object string', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: '["Main Garage"]',
+        GARAGE_DOORS: '{"Main Garage": "main-garage"}',
       };
       const req = new Request('https://worker.dev');
       const response = await worker.fetch(req, mockEnv, {} as any);
@@ -113,12 +113,12 @@ describe('myq-garage-worker integration tests', () => {
     it('serves JSON when ?json=true is provided', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: ['Garage Door Left', 'Garage Door Right'],
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const req = new Request('https://worker.dev?json=true');
 
       kvStore.set(
-        'garage-door-right',
+        'garage-right',
         JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:00.000Z' }),
       );
 

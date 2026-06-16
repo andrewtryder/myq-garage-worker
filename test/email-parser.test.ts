@@ -1,17 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
-import { parseMyQSubject, resolveDoorKey, mapActionToStatus, slugify } from '../src/email-parser';
+import { parseMyQSubject, resolveDoorKey, mapActionToStatus } from '../src/email-parser';
 import { Env } from '../src/types';
 
 describe('email-parser unit tests', () => {
   const mockEnv: Env = {
     GARAGE_STATE: {} as any,
-    GARAGE_DOORS: ['Garage Door Left', 'Garage Door Right', 'Main Garage'],
+    GARAGE_DOORS: {
+      'Garage Door Left': 'garage-left',
+      'Garage Door Right': 'garage-right',
+      'Main Garage': 'main-garage',
+    },
   };
 
   const mockEnvString: Env = {
     GARAGE_STATE: {} as any,
-    GARAGE_DOORS: '["Garage Door Left", "Garage Door Right", "Main Garage"]',
+    GARAGE_DOORS:
+      '{"Garage Door Left": "garage-left", "Garage Door Right": "garage-right", "Main Garage": "main-garage"}',
   };
 
   describe('parseMyQSubject', () => {
@@ -53,30 +58,20 @@ describe('email-parser unit tests', () => {
     });
   });
 
-  describe('slugify', () => {
-    it('converts to lowercase and replaces spaces with hyphens', () => {
-      expect(slugify('Garage Door Left')).toBe('garage-door-left');
-    });
-
-    it('handles special characters properly', () => {
-      expect(slugify('Main & Garage 123!')).toBe('main-garage-123');
-    });
-  });
-
   describe('resolveDoorKey', () => {
-    it('resolves configured door array to slugified key', () => {
+    it('resolves configured door object to mapped key', () => {
       const key = resolveDoorKey('Garage Door Right', mockEnv);
-      expect(key).toBe('garage-door-right');
+      expect(key).toBe('garage-right');
     });
 
-    it('resolves configured door string (JSON) to slugified key', () => {
+    it('resolves configured door string (JSON) to mapped key', () => {
       const key = resolveDoorKey('Main Garage', mockEnvString);
       expect(key).toBe('main-garage');
     });
 
     it('resolves case-insensitively', () => {
       const key = resolveDoorKey('garage DOOR left', mockEnv);
-      expect(key).toBe('garage-door-left');
+      expect(key).toBe('garage-left');
     });
 
     it('returns null for unconfigured device name', () => {

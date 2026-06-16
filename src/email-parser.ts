@@ -19,37 +19,30 @@ export function parseMyQSubject(subject: string): MyQParsedSubject | null {
   };
 }
 
-export function slugify(text: string): string {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w-]+/g, '') // Remove all non-word chars
-    .replace(/--+/g, '-'); // Replace multiple - with single -
-}
-
 export function resolveDoorKey(deviceName: string, env: Env): string | null {
-  let configuredDoors: string[] = [];
+  let configuredDoors: Record<string, string> = {};
 
   if (typeof env.GARAGE_DOORS === 'string') {
     try {
       configuredDoors = JSON.parse(env.GARAGE_DOORS);
     } catch {
-      // If it fails to parse, perhaps it's a single door string?
-      configuredDoors = [env.GARAGE_DOORS];
+      console.error('Failed to parse GARAGE_DOORS JSON string');
+      return null;
     }
-  } else if (Array.isArray(env.GARAGE_DOORS)) {
+  } else if (
+    typeof env.GARAGE_DOORS === 'object' &&
+    env.GARAGE_DOORS !== null &&
+    !Array.isArray(env.GARAGE_DOORS)
+  ) {
     configuredDoors = env.GARAGE_DOORS;
   }
 
-  // Exact match (case insensitive)
-  const matchedDoor = configuredDoors.find(
-    (door) => door.toLowerCase() === deviceName.toLowerCase(),
-  );
-
-  if (matchedDoor) {
-    return slugify(matchedDoor);
+  // Exact match (case insensitive) on keys
+  const targetNameLower = deviceName.toLowerCase();
+  for (const [name, key] of Object.entries(configuredDoors)) {
+    if (name.toLowerCase() === targetNameLower) {
+      return key;
+    }
   }
 
   return null;
