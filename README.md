@@ -23,10 +23,17 @@ If you are using this worker for personal use, it is highly recommended to prote
 
 These variables must be configured in your `wrangler.jsonc` or via the Cloudflare dashboard:
 
-| Variable Name      | Description                                   |
-| ------------------ | --------------------------------------------- |
-| `GARAGE_LEFT_KEY`  | Key used in KV to store the Left garage door  |
-| `GARAGE_RIGHT_KEY` | Key used in KV to store the Right garage door |
+| Variable Name  | Description                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `GARAGE_DOORS` | A JSON array of the exact names of your garage doors as they appear in the myQ app/emails. |
+
+Example `wrangler.jsonc` var configuration:
+
+```jsonc
+  "vars": {
+    "GARAGE_DOORS": ["Garage Door Left", "Garage Door Right"]
+  }
+```
 
 You also need to bind a KV Namespace to `GARAGE_STATE`. See `wrangler.jsonc` for details.
 

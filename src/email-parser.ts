@@ -19,12 +19,39 @@ export function parseMyQSubject(subject: string): MyQParsedSubject | null {
   };
 }
 
+export function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/[^\w-]+/g, '') // Remove all non-word chars
+    .replace(/--+/g, '-'); // Replace multiple - with single -
+}
+
 export function resolveDoorKey(deviceName: string, env: Env): string | null {
-  if (/garage door right/i.test(deviceName)) {
-    return env.GARAGE_RIGHT_KEY;
-  } else if (/garage door left/i.test(deviceName)) {
-    return env.GARAGE_LEFT_KEY;
+  let configuredDoors: string[] = [];
+
+  if (typeof env.GARAGE_DOORS === 'string') {
+    try {
+      configuredDoors = JSON.parse(env.GARAGE_DOORS);
+    } catch {
+      // If it fails to parse, perhaps it's a single door string?
+      configuredDoors = [env.GARAGE_DOORS];
+    }
+  } else if (Array.isArray(env.GARAGE_DOORS)) {
+    configuredDoors = env.GARAGE_DOORS;
   }
+
+  // Exact match (case insensitive)
+  const matchedDoor = configuredDoors.find(
+    (door) => door.toLowerCase() === deviceName.toLowerCase(),
+  );
+
+  if (matchedDoor) {
+    return slugify(matchedDoor);
+  }
+
   return null;
 }
 

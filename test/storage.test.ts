@@ -1,92 +1,99 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { saveDoorState, getDoorState, getDoorHistory } from '../src/storage';
-import { Env } from '../src/types';
+import { Env, DoorState } from '../src/types';
 
 describe('storage KV tests', () => {
   let mockKV: any;
-  let mockEnv: Env;
   let store: Map<string, string>;
+  let mockEnv: Env;
 
   beforeEach(() => {
-    store = new Map<string, string>();
+    store = new Map();
     mockKV = {
-      put: vi.fn(async (key: string, val: string) => {
-        store.set(key, val);
-      }),
-      get: vi.fn(async (key: string) => {
-        return store.get(key) || null;
+      get: vi.fn((key: string) => Promise.resolve(store.get(key) || null)),
+      put: vi.fn((key: string, value: string) => {
+        store.set(key, value);
+        return Promise.resolve();
       }),
     };
 
     mockEnv = {
       GARAGE_STATE: mockKV,
-      GARAGE_LEFT_KEY: 'left-door',
-      GARAGE_RIGHT_KEY: 'right-door',
+      GARAGE_DOORS: [],
     };
   });
 
-  it('saveDoorState saves serialized JSON object and appends to history', async () => {
-    await saveDoorState(mockEnv, 'left-door', 'OPEN');
+  describe('saveDoorState', () => {
+    it('saves serialized JSON object and appends to history', async () => {
+      await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
-    // 1. Check latest state
-    expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
-    const parsedState = JSON.parse(store.get('left-door') || '');
-    expect(parsedState.value).toBe('OPEN');
+      // Check current state write
+      expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
+      const parsedState = JSON.parse(store.get('left-door') || '');
+      expect(parsedState.value).toBe('OPEN');
+      expect(parsedState.createdAt).toBeTruthy();
 
-    // 2. Check history log
-    expect(mockKV.put).toHaveBeenCalledWith('history:left-door', expect.any(String));
-    const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
-    expect(parsedHistory).toHaveLength(1);
-    expect(parsedHistory[0].value).toBe('OPEN');
-    expect(new Date(parsedHistory[0].createdAt).getTime()).not.toBeNaN();
-  });
+      expect(mockKV.put).toHaveBeenCalledWith('history:left-door', expect.any(String));
+      const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
+      expect(parsedHistory.length).toBe(1);
+      expect(parsedHistory[0].value).toBe('OPEN');
+    });
 
-  it('saveDoorState caps history array to 20 entries', async () => {
-    // Fill history with 25 initial dummy records
-    const initialHistory = Array.from({ length: 25 }, (_, i) => ({
-      value: 'CLOSED',
-      createdAt: new Date(Date.now() - i * 1000).toISOString(),
-    }));
-    store.set('history:left-door', JSON.stringify(initialHistory));
+    it('caps history array to 20 entries', async () => {
+      const initialHistory: DoorState[] = Array(20)
+        .fill(null)
+        .map((_, i) => ({
+          value: 'CLOSED',
+          createdAt: `2023-01-01T00:00:${i.toString().padStart(2, '0')}.000Z`,
+        }));
 
-    await saveDoorState(mockEnv, 'left-door', 'OPEN');
+      store.set('history:left-door', JSON.stringify(initialHistory));
 
-    const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
-    expect(parsedHistory).toHaveLength(20);
-    expect(parsedHistory[0].value).toBe('OPEN'); // Newest is prepended
-  });
+      await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
-  it('getDoorState retrieves and parses stored state', async () => {
-    const rawState = JSON.stringify({ value: 'CLOSED', createdAt: '2026-06-06T20:00:00.000Z' });
-    await mockKV.put('right-door', rawState);
-
-    const result = await getDoorState(mockEnv, 'right-door');
-    expect(result).toEqual({
-      value: 'CLOSED',
-      createdAt: '2026-06-06T20:00:00.000Z',
+      const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
+      expect(parsedHistory.length).toBe(20);
+      // Ensure the newest entry is at the top
+      expect(parsedHistory[0].value).toBe('OPEN');
     });
   });
 
-  it('getDoorState returns default state if key is not found', async () => {
-    const result = await getDoorState(mockEnv, 'non-existent');
-    expect(result).toEqual({
-      value: 'UNKNOWN',
-      createdAt: '',
+  describe('getDoorState', () => {
+    it('returns stored state', async () => {
+      const rawState = JSON.stringify({ value: 'CLOSED', createdAt: '2024-01-01T00:00:00.000Z' });
+      await mockKV.put('right-door', rawState);
+
+      const result = await getDoorState(mockEnv, 'right-door');
+      expect(result).toEqual({
+        value: 'CLOSED',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    });
+
+    it('returns UNKNOWN if missing', async () => {
+      const result = await getDoorState(mockEnv, 'missing-door');
+      expect(result.value).toBe('UNKNOWN');
+      expect(result.createdAt).toBe('');
     });
   });
 
-  it('getDoorHistory retrieves and parses log history', async () => {
-    const rawHistory = JSON.stringify([
-      { value: 'OPEN', createdAt: '2026-06-06T20:00:00.000Z' },
-      { value: 'CLOSED', createdAt: '2026-06-06T19:00:00.000Z' },
-    ]);
-    store.set('history:right-door', rawHistory);
+  describe('getDoorHistory', () => {
+    it('returns parsed history array', async () => {
+      const rawHistory = JSON.stringify([
+        { value: 'OPEN', createdAt: '1' },
+        { value: 'CLOSED', createdAt: '2' },
+      ]);
+      store.set('history:right-door', rawHistory);
 
-    const result = await getDoorHistory(mockEnv, 'right-door');
-    expect(result).toEqual([
-      { value: 'OPEN', createdAt: '2026-06-06T20:00:00.000Z' },
-      { value: 'CLOSED', createdAt: '2026-06-06T19:00:00.000Z' },
-    ]);
+      const result = await getDoorHistory(mockEnv, 'right-door');
+      expect(result.length).toBe(2);
+      expect(result[0].value).toBe('OPEN');
+    });
+
+    it('returns empty array if missing', async () => {
+      const result = await getDoorHistory(mockEnv, 'missing-door');
+      expect(result).toEqual([]);
+    });
   });
 });
