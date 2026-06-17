@@ -1,12 +1,10 @@
 export interface Env {
   GARAGE_STATE: KVNamespace;
-  GARAGE_LEFT_FEED: string;
-  GARAGE_RIGHT_FEED: string;
+  GARAGE_DOORS: Record<string, string> | string;
+  API_KEY?: string;
 }
 
 export type DoorStatus = 'OPEN' | 'CLOSED' | 'STOPPED' | 'UNKNOWN';
-
-export type DoorName = 'left' | 'right';
 
 export interface DoorState {
   value: string;

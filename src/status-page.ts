@@ -1,7 +1,12 @@
 import { DoorState } from './types';
 
 export interface HistoryEntry extends DoorState {
-  door: 'left' | 'right';
+  doorName: string;
+}
+
+export interface DoorData {
+  name: string;
+  state: DoorState;
 }
 
 export function statusColor(value: string): string {
@@ -23,22 +28,41 @@ export function statusLabel(value: string | undefined): string {
   return value.toUpperCase();
 }
 
-export function renderStatusPage(
-  rightDoor: DoorState | null,
-  leftDoor: DoorState | null,
-  history: HistoryEntry[] = [],
-): string {
-  const rightValue = rightDoor?.value || '';
-  const rightTime = rightDoor?.createdAt || 'N/A';
-  const leftValue = leftDoor?.value || '';
-  const leftTime = leftDoor?.createdAt || 'N/A';
+export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[] = []): string {
+  const doorsHtml = doors
+    .map((door) => {
+      const val = door.state.value || '';
+      const time = door.state.createdAt || 'N/A';
+
+      return `
+      <div class="card">
+        <div class="card-header">
+          <div class="door-name">${door.name}</div>
+          <span class="status-pill ${
+            val === 'OPEN'
+              ? 'status-open'
+              : val === 'CLOSED'
+                ? 'status-closed'
+                : val === 'STOPPED'
+                  ? 'status-stopped'
+                  : 'status-unknown'
+          }">
+            ${statusLabel(val)}
+          </span>
+        </div>
+        <div class="meta">
+          Last update: ${time}
+        </div>
+      </div>
+    `;
+    })
+    .join('\n');
 
   const historyHtml =
     history.length === 0
       ? `<div class="empty-history">No recent activity recorded.</div>`
       : history
           .map((entry) => {
-            const doorLabel = entry.door === 'right' ? 'Garage Door Right' : 'Garage Door Left';
             const statusUpper = entry.value.toUpperCase();
             const doorClass =
               statusUpper === 'OPEN'
@@ -62,7 +86,7 @@ export function renderStatusPage(
         <div class="timeline-item">
           <div class="timeline-marker ${doorClass}"></div>
           <div class="timeline-content">
-            <span class="timeline-door">${doorLabel}</span>
+            <span class="timeline-door">${entry.doorName}</span>
             <span class="timeline-action ${actionClass}">${statusLabel(entry.value)}</span>
             <span class="timeline-time">${entry.createdAt || 'N/A'}</span>
           </div>
@@ -76,7 +100,7 @@ export function renderStatusPage(
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Garage Status – MyQ / Adafruit IO</title>
+  <title>Garage Status – MyQ / Cloudflare KV</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
@@ -230,45 +254,7 @@ export function renderStatusPage(
       Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
     </div>
     <div class="grid">
-      <div class="card">
-        <div class="card-header">
-          <div class="door-name">Garage Door Right</div>
-          <span class="status-pill ${
-            rightValue === 'OPEN'
-              ? 'status-open'
-              : rightValue === 'CLOSED'
-                ? 'status-closed'
-                : rightValue === 'STOPPED'
-                  ? 'status-stopped'
-                  : 'status-unknown'
-          }">
-            ${statusLabel(rightValue)}
-          </span>
-        </div>
-        <div class="meta">
-          Last update: ${rightTime}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="door-name">Garage Door Left</div>
-          <span class="status-pill ${
-            leftValue === 'OPEN'
-              ? 'status-open'
-              : leftValue === 'CLOSED'
-                ? 'status-closed'
-                : leftValue === 'STOPPED'
-                  ? 'status-stopped'
-                  : 'status-unknown'
-          }">
-            ${statusLabel(leftValue)}
-          </span>
-        </div>
-        <div class="meta">
-          Last update: ${leftTime}
-        </div>
-      </div>
+      ${doorsHtml}
     </div>
 
     <!-- History Log Section -->

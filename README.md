@@ -1,30 +1,45 @@
 # myq-garage-worker
 
-A Cloudflare Worker that integrates **myQ** notification emails with **Adafruit IO** feeds and displays a clean, beautiful status dashboard.
+A Cloudflare Worker that integrates **myQ** notification emails and displays a clean, beautiful status dashboard. State is stored natively in Cloudflare KV.
+
+For a step-by-step guide on how to configure MyQ, Cloudflare, and email forwarding, please see the [Setup Guide](SETUP.md).
 
 ## Architecture
 
 This worker acts as two endpoints:
 
-1. **Email Routing Handler (`email`)**: Triggered when a myQ notification email is routed to the worker. It parses the sender and subject to extract device action (opened, closed, stopped) and maps it to specific Adafruit IO feeds.
-2. **HTTP Handler (`fetch`)**: Serves a sleek, modern dashboard page displaying the current status of the garage doors retrieved directly from the last data point in your Adafruit IO feeds.
+1. **Email Routing Handler (`email`)**: Triggered when a myQ notification email is routed to the worker. It parses the sender and subject to extract device action (opened, closed, stopped) and logs the state.
+2. **HTTP Handler (`fetch`)**: Serves a sleek, modern dashboard page displaying the current status of the garage doors retrieved directly from Cloudflare KV.
 
 ## Tech Stack
 
 - **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/)
 - **Codebase**: TypeScript, ESLint, Prettier
-- **Integration**: Adafruit IO REST API
+- **Storage**: [Cloudflare KV](https://developers.cloudflare.com/kv/)
 
-## Environment Variables / Secrets
+## Security Recommendation
 
-These variables must be configured on Cloudflare Workers (either via the dashboard or using `npx wrangler secret put`):
+If you are using this worker for personal use, it is highly recommended to protect your public status page. You can easily do this by putting the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/), restricting access to only your authorized emails or identity providers.
 
-| Variable Name       | Description                                           |
-| ------------------- | ----------------------------------------------------- |
-| `ADAFRUIT_USERNAME` | Your Adafruit IO username                             |
-| `ADAFRUIT_IO_KEY`   | Your Adafruit IO API key (Secret)                     |
-| `GARAGE_LEFT_FEED`  | Key of the Adafruit IO feed for the Left garage door  |
-| `GARAGE_RIGHT_FEED` | Key of the Adafruit IO feed for the Right garage door |
+## Environment Variables / Configuration
+
+The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
+
+| Variable Name  | Description                                                                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                 |
+| `API_KEY`      | _(Optional)_ A secret key to protect the status dashboard and JSON endpoints. If set, you must pass `?key=YOUR_KEY` in the URL or provide it via `Authorization: Bearer YOUR_KEY` or `x-api-key` headers. |
+
+**Example configuration:**
+
+```json
+{
+  "Garage Door Left": "garage-left",
+  "Garage Door Right": "garage-right"
+}
+```
+
+You also need to bind a KV Namespace to `GARAGE_STATE`. See `wrangler.jsonc` for details.
 
 ## Local Development
 
@@ -57,4 +72,4 @@ Deployments are automated through **GitHub Actions** when code is pushed to the 
 To set this up, add the following Repository Secrets in your GitHub repository (**Settings** -> **Secrets and variables** -> **Actions**):
 
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API Token (scoped to Edit Workers).
-- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (`e10df460dbcb5906dc9046c03bc276c7`).
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (e.g. `e10df460dbcb5906dc9046c03bc276c7`).
