@@ -41,6 +41,21 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 
 You also need to bind a KV Namespace to `GARAGE_STATE`. See `wrangler.jsonc` for details.
 
+## Setup and Deployment
+
+We provide an interactive wizard to configure your garage doors, create the Cloudflare KV namespace, and deploy the worker:
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Run the interactive setup wizard:
+   ```bash
+   npm run setup
+   ```
+
+For a detailed step-by-step guide including Cloudflare Email Routing and myQ configuration, see the [Setup Guide](SETUP.md).
+
 ## Local Development
 
 1. Install dependencies:
