@@ -262,16 +262,82 @@ export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[]
       font-size: 14px;
       padding: 16px 0;
     }
+
+    .tabs {
+      display: flex;
+      margin-bottom: 24px;
+      border-bottom: 1px solid rgba(148,163,184,0.2);
+    }
+    .tab {
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #9ca3af;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover {
+      color: #e5e7eb;
+    }
+    .tab.active {
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
+    }
+    .sim-input {
+      width: 100%;
+      background: rgba(15,23,42,0.5);
+      border: 1px solid rgba(148,163,184,0.3);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #f9fafb;
+      font-size: 14px;
+      box-sizing: border-box;
+      outline: none;
+    }
+    .sim-input:focus {
+      border-color: #3b82f6;
+    }
+    .sim-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    .sim-btn:hover {
+      background: #2563eb;
+    }
+    .sim-btn:disabled {
+      background: #475569;
+      cursor: not-allowed;
+    }
+
   </style>
 </head>
 <body>
   <div class="wrapper">
+
+    <!-- Tabs Navigation -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+      <div class="tab" onclick="switchTab('simulator')">Simulator</div>
+    </div>
+
     <h1>Garage Door Status</h1>
     <div class="subtitle">
       Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
     </div>
+    <div id="dashboard-tab">
     <div class="grid">
       ${doorsHtml}
+    </div>
+
     </div>
 
     <!-- History Log Section -->
@@ -283,7 +349,123 @@ export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[]
         ${historyHtml}
       </div>
     </div>
+
+    <!-- Simulator Section -->
+    <div id="simulator-tab" class="card history-card" style="display: none;">
+      <div class="card-header">
+        <div class="door-name">Test Simulator</div>
+      </div>
+      <div class="simulator-body">
+        <p style="font-size:14px;color:#9ca3af;margin-top:0;">Send a simulated test event to check your configuration without triggering a real garage door.</p>
+
+        <form id="simForm" onsubmit="submitSimulation(event)">
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door Name (Exact Match)</label>
+            <input type="text" id="simDoor" placeholder="e.g. Garage Door Left" required class="sim-input" />
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Action</label>
+            <select id="simAction" required class="sim-input">
+              <option value="opened">Opened</option>
+              <option value="closed">Closed</option>
+              <option value="stopped">Stopped</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">API Key (If configured)</label>
+            <input type="password" id="simKey" placeholder="Your API_KEY" class="sim-input" />
+          </div>
+
+          <div style="margin-bottom: 16px; border-top: 1px solid rgba(148,163,184,0.2); margin-top: 16px; padding-top: 16px;">
+            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Or paste raw MyQ Subject line</label>
+            <input type="text" id="simSubject" placeholder="myQ Notification: Garage Door Right just opened" class="sim-input" />
+          </div>
+
+          <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
+        </form>
+
+        <div id="simResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
+      </div>
+    </div>
+
   </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('.tab[onclick="switchTab(' + "'" + tabId + "'" + ')"]').classList.add('active');
+
+      if (tabId === 'dashboard') {
+        document.getElementById('dashboard-tab').style.display = 'block';
+        document.getElementById('simulator-tab').style.display = 'none';
+      } else {
+        document.getElementById('dashboard-tab').style.display = 'none';
+        document.getElementById('simulator-tab').style.display = 'block';
+      }
+    }
+
+    async function submitSimulation(e) {
+      e.preventDefault();
+      const btn = document.getElementById('simBtn');
+      const resDiv = document.getElementById('simResult');
+
+      btn.disabled = true;
+      btn.textContent = 'Simulating...';
+      resDiv.style.display = 'none';
+
+      const doorName = document.getElementById('simDoor').value;
+      const action = document.getElementById('simAction').value;
+      const key = document.getElementById('simKey').value;
+      const subject = document.getElementById('simSubject').value;
+
+      const payload = {};
+      if (subject) {
+        payload.subject = subject;
+      } else {
+        payload.deviceName = doorName;
+        payload.action = action;
+      }
+
+      let url = '/simulate';
+      if (key) {
+        url += '?key=' + encodeURIComponent(key);
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        resDiv.style.display = 'block';
+
+        if (response.ok) {
+          resDiv.style.background = 'rgba(82, 196, 26, 0.15)';
+          resDiv.style.color = '#52c41a';
+          resDiv.style.border = '1px solid rgba(82, 196, 26, 0.3)';
+          resDiv.textContent = 'Success! ' + data.door + ' state updated to ' + data.state;
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
+          resDiv.style.color = '#ff4d4f';
+          resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
+          resDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+        }
+      } catch (err) {
+        resDiv.style.display = 'block';
+        resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
+        resDiv.style.color = '#ff4d4f';
+        resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
+        resDiv.textContent = 'Network error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Simulate Event';
+      }
+    }
+  </script>
+
 </body>
 </html>`;
 }
