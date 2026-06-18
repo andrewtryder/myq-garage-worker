@@ -73,11 +73,11 @@ Finally, you need to forward the notifications from your personal email to the C
 
 You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your public status dashboard!
 
-## 5. Protect your dashboard and access with an API Key
+## 5. Protect API routes with an API Key
 
-To restrict access to the web dashboard, create a secret `API_KEY`.
+To protect machine-facing routes (`GET /devices`, `GET /?json=true`, `POST /simulate`) while keeping the HTML dashboard at `/` public, create a secret `API_KEY`.
 
 - _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
 - _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.
 
-Once configured, you must access your dashboard URL by appending the key: `https://your-worker.workers.dev/?key=YOUR_API_KEY`.
+The status dashboard remains bookmarkable at `https://your-worker.workers.dev/` with no key. Home Assistant and other API clients should send `Authorization: Bearer YOUR_API_KEY` (or use `?key=` / `x-api-key` on protected routes).

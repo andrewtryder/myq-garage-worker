@@ -27,7 +27,7 @@ This worker acts as two endpoints:
 
 ## Security Recommendation
 
-If you are using this worker for personal use, it is highly recommended to protect your public status page. You can easily do this by putting the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/), restricting access to only your authorized emails or identity providers.
+If you are using this worker for personal use, set `API_KEY` to protect machine-facing API routes while keeping the HTML dashboard at `/` bookmark-friendly (no key required in the browser). For stronger access control on the dashboard itself, put the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/), restricting access to only your authorized emails or identity providers.
 
 ## Environment Variables / Configuration
 
@@ -36,7 +36,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 | Variable Name  | Description                                                                                                                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                 |
-| `API_KEY`      | _(Optional)_ A secret key to protect the status dashboard and JSON endpoints. If set, you must pass `?key=YOUR_KEY` in the URL or provide it via `Authorization: Bearer YOUR_KEY` or `x-api-key` headers. |
+| `API_KEY`      | _(Optional)_ Secret key protecting API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`). The HTML status dashboard at `/` stays public so you can bookmark it in a browser. Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
 
 **Example configuration:**
 
@@ -164,13 +164,31 @@ Alternatively, you can route the JSON payload through a service like `n8n` to tr
 
 #### Home Assistant Integration
 
-For Home Assistant, use the companion **[ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage)** custom integration (available via HACS). It polls this worker's JSON API and creates cover entities with config-flow setup — no manual REST sensor YAML required.
+For Home Assistant, use the companion **[ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage)** custom integration (available via HACS). It polls `GET /devices` on this worker and creates cover entities with config-flow setup.
 
-1. Deploy this worker and note your worker URL and optional `API_KEY`.
-2. Install [ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage) via HACS.
-3. Add the integration in Home Assistant (**Settings → Devices & Services → Add Integration → MyQ Garage**).
+**Browser dashboard:** open `https://your-worker.workers.dev/` — no API key required, even when `API_KEY` is set.
 
-**Advanced / fallback:** The API endpoint at `https://your-worker.workers.dev/?json=true` returns the current state and durations of all doors. You can poll it with the Home Assistant REST integration if you prefer a manual setup. The returned JSON looks like:
+**Home Assistant setup:**
+
+1. Deploy this worker with `GARAGE_DOORS` configured at deploy time (via `npm run setup` or CI). Without it, `/devices` returns an empty array.
+2. Set the `API_KEY` secret on the worker.
+3. Install [ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage) via HACS.
+4. Add the integration in Home Assistant (**Settings → Devices & Services → Add Integration → MyQ Garage**):
+   - **API URL:** `https://your-worker.workers.dev`
+   - **API key:** your `API_KEY` value (sent as `Authorization: Bearer …`)
+
+The integration calls `GET /devices`, which returns:
+
+```json
+[
+  { "id": "garage-left", "name": "Garage Door Left", "status": "open" },
+  { "id": "garage-right", "name": "Garage Door Right", "status": "closed" }
+]
+```
+
+`id` is the stable KV key from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
+
+**Advanced / fallback:** `GET /?json=true` (requires `API_KEY` when set) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups:
 
 ```json
 {
