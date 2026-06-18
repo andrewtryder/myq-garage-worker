@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.5...myq-garage-worker-v0.1.6) (2026-06-18)
+
+
+### Features
+
+* add interactive setup wizard for one-click deployment ([9fcd0c6](https://github.com/andrewtryder/myq-garage-worker/commit/9fcd0c6d58d0b85580207b8eea863532c6aed9b6))
+* add interactive setup wizard for one-click deployment ([35142d0](https://github.com/andrewtryder/myq-garage-worker/commit/35142d021c5e7104747346286325f18d606aa727))
+
 ## [0.1.5](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.4...myq-garage-worker-v0.1.5) (2026-06-17)
 
 ### Features
