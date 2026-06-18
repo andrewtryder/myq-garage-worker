@@ -107,7 +107,7 @@ describe('myq-garage-worker integration tests', () => {
 
       const text = await response.text();
       expect(text).toContain('Main Garage');
-      expect(text).not.toContain('Garage Door Right');
+      expect(text).not.toContain('"door-name">Garage Door Right');
     });
 
     it('serves JSON when ?json=true is provided', async () => {

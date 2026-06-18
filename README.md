@@ -72,6 +72,26 @@ For a detailed step-by-step guide including Cloudflare Email Routing and myQ con
 
 3. Open `http://localhost:8787` to view the local instance of the status page.
 
+## Testing Live Deployments
+
+To ensure your dashboard UI updates correctly without having to open/close your physical garage doors, we have built-in testing functionality:
+
+### Option 1: Web UI Simulator
+
+Open your deployed worker URL in a browser. At the top of the screen, switch to the **Simulator** tab.
+You can use the form to enter a door name (exactly as configured), an action (opened, closed, stopped), and your API key (if set) to simulate an event. You can also paste the raw subject line from a real myQ notification email.
+
+### Option 2: CLI Script
+
+You can use the included CLI script from your terminal to ping the live (or local) worker:
+
+```bash
+# node scripts/test-live.js <URL> <DOOR_NAME> <ACTION> [API_KEY]
+node scripts/test-live.js https://my-worker.workers.dev "Garage Door Left" opened
+```
+
+Both options talk to a dedicated `POST /simulate` endpoint which bypasses the strict email "From:" address validations but executes the exact same parsing and Cloudflare KV storage updates as a real email.
+
 ## Formatting & Linting
 
 We maintain a strict code quality process:

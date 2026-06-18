@@ -226,6 +226,57 @@ export default {
       combinedHistory = combinedHistory.slice(0, 50);
 
       const url = new URL(request.url);
+
+      // Simulate endpoint
+      if (request.method === 'POST' && url.pathname === '/simulate') {
+        try {
+          const body = (await request.json()) as {
+            subject?: string;
+            deviceName?: string;
+            action?: string;
+          };
+
+          let deviceName = body.deviceName;
+          let action = body.action;
+
+          if (body.subject) {
+            const parsed = parseMyQSubject(body.subject);
+            if (parsed) {
+              deviceName = parsed.deviceName;
+              action = parsed.action;
+            }
+          }
+
+          if (!deviceName || !action) {
+            return new Response(
+              JSON.stringify({ error: 'Missing deviceName or action (or valid subject)' }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+
+          const doorKey = resolveDoorKey(deviceName, env);
+          if (!doorKey) {
+            return new Response(JSON.stringify({ error: `Unknown device name: ${deviceName}` }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          const value = mapActionToStatus(action);
+          await saveDoorState(env, doorKey, value);
+
+          return new Response(JSON.stringify({ success: true, door: deviceName, state: value }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch {
+          return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
       const isJson = url.searchParams.get('json') === 'true';
 
       if (isJson) {
