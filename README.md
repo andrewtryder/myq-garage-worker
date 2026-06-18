@@ -88,3 +88,59 @@ To set this up, add the following Repository Secrets in your GitHub repository (
 
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API Token (scoped to Edit Workers).
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (e.g. `e10df460dbcb5906dc9046c03bc276c7`).
+
+## Integrations & Automations
+
+This worker can automatically notify external services when a garage door is left open, or simply push status updates to external services like Home Assistant.
+
+### Webhook Alerts (Left Open)
+
+You can configure the worker to automatically check for doors left open for too long using Cloudflare Cron Triggers.
+
+1. Configure the `WEBHOOK_URL` and `ALERT_OPEN_THRESHOLD_MINUTES` environment variables.
+   - `ALERT_OPEN_THRESHOLD_MINUTES`: How many minutes the door must be open before sending an alert (defaults to 60).
+   - `WEBHOOK_URL`: The destination URL to send the JSON alert payload to.
+2. Ensure you have the `[triggers]` configuration uncommented in `wrangler.jsonc` to fire the cron job.
+
+When triggered, the worker sends a standard `POST` request to the `WEBHOOK_URL` containing a JSON body:
+
+```json
+{
+  "title": "Garage Door Alert",
+  "message": "Garage Door Left has been open for 1 hr 15 mins.",
+  "door": "Garage Door Left",
+  "state": "OPEN",
+  "durationMs": 4500000,
+  "durationText": "1 hr 15 mins"
+}
+```
+
+#### Apprise Integration
+
+If you host an [Apprise API](https://github.com/caronc/apprise-api) container, you can fan-out notifications to Discord, Slack, SMS, Pushbullet, etc.
+Set your `WEBHOOK_URL` to your Apprise topic endpoint, for example:
+`WEBHOOK_URL = "https://apprise.mydomain.com/notify/garage"`
+
+#### ntfy.sh Integration
+
+[ntfy.sh](https://ntfy.sh/) is a simple HTTP-based pub-sub notification service. Since `ntfy.sh` supports receiving raw JSON via POST to standard topics, you can set your `WEBHOOK_URL` directly to your secret ntfy topic endpoint (though parsing might require a middleman or using ntfy's raw JSON publish features).
+Alternatively, you can route the JSON payload through a service like `n8n` to translate the JSON into a clean Push notification.
+
+#### Home Assistant Integration
+
+The API endpoint at `https://your-worker.workers.dev/?json=true` returns the current state and durations of all doors.
+You can use the Home Assistant REST integration to poll this endpoint to create sensors. The returned JSON looks like:
+
+```json
+{
+  "doors": [
+    {
+      "name": "Garage Door Left",
+      "state": { "value": "OPEN", "createdAt": "2023-10-01T12:00:00Z" },
+      "durationMs": 3600000,
+      "durationText": "1 hr"
+    }
+  ],
+  "history": [ ... ]
+}
+```
