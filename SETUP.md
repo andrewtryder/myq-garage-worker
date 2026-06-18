@@ -26,6 +26,10 @@ To feed data into the worker, we first need to instruct the MyQ app to send emai
    npm run setup
    ```
 
+   **Re-running the wizard:** If you already have a Worker deployed, the wizard detects your existing KV namespace, secrets, and `GARAGE_DOORS` configuration. It defaults to reusing that infrastructure and will not recreate KV unless you explicitly ask it to. A deploy dry-run runs before any live deployment.
+
+   **Authentication:** You can authenticate with a `CLOUDFLARE_API_TOKEN` in a `.env` file (recommended) or with `npx wrangler login`. If `CLOUDFLARE_API_TOKEN` is set, the wizard uses it directly and will not attempt OAuth login.
+
    _Alternatively, to deploy manually without the wizard:_
 
    ```bash
@@ -60,7 +64,7 @@ Finally, you need to forward the notifications from your personal email to the C
 1. Go to Gmail Settings (gear icon) -> **See all settings**.
 2. Go to the **Forwarding and POP/IMAP** tab.
 3. Click **Add a forwarding address** and enter the Cloudflare email address you created (e.g., `garage@yourdomain.com`).
-4. Google will send a verification code to that address. Since the worker isn't set up to forward that code back to you, you may need to temporarily point that Cloudflare email address to your personal inbox, get the code, verify it, and then point it back to the Worker.
+4. Google will send a verification code to that address. Since the worker isn't set up to forward that code back to you, you will need to temporarily point that Cloudflare email address to your personal inbox, get the code, verify it, and then point it back to the Worker.
 5. Once verified, go to the Gmail search bar, click the filter icon, and create a filter:
    - **From**: `notification@myq.com`
    - Click **Create filter**.
@@ -69,7 +73,7 @@ Finally, you need to forward the notifications from your personal email to the C
 
 You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your public status dashboard!
 
-## 5. (Optional) Protect your dashboard with an API Key
+## 5. Protect your dashboard and access with an API Key
 
 To restrict access to the web dashboard, create a secret `API_KEY`.
 

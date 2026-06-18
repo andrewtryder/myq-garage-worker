@@ -329,62 +329,60 @@ export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[]
       <div class="tab" onclick="switchTab('simulator')">Simulator</div>
     </div>
 
-    <h1>Garage Door Status</h1>
-    <div class="subtitle">
-      Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
-    </div>
-    <div id="dashboard-tab">
-    <div class="grid">
-      ${doorsHtml}
-    </div>
-
-    </div>
-
-    <!-- History Log Section -->
-    <div class="card history-card">
-      <div class="card-header">
-        <div class="door-name">Recent Activity Log</div>
+    <div id="dashboard-view">
+      <h1>Garage Door Status</h1>
+      <div class="subtitle">
+        Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
       </div>
-      <div class="timeline">
-        ${historyHtml}
+      <div class="grid">
+        ${doorsHtml}
+      </div>
+
+      <div class="card history-card">
+        <div class="card-header">
+          <div class="door-name">Recent Activity Log</div>
+        </div>
+        <div class="timeline">
+          ${historyHtml}
+        </div>
       </div>
     </div>
 
-    <!-- Simulator Section -->
-    <div id="simulator-tab" class="card history-card" style="display: none;">
-      <div class="card-header">
-        <div class="door-name">Test Simulator</div>
+    <div id="simulator-view" style="display: none;">
+      <h1>Test Simulator</h1>
+      <div class="subtitle">
+        Send a simulated test event to check your configuration without triggering a real garage door.
       </div>
-      <div class="simulator-body">
-        <p style="font-size:14px;color:#9ca3af;margin-top:0;">Send a simulated test event to check your configuration without triggering a real garage door.</p>
+      <div class="card history-card">
+        <div class="simulator-body">
+          <form id="simForm" onsubmit="submitSimulation(event)">
+            <div style="margin-bottom:12px;">
+              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door Name (Exact Match)</label>
+              <input type="text" id="simDoor" placeholder="e.g. Garage Door Left" required class="sim-input" />
+            </div>
+            <div style="margin-bottom:12px;">
+              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Action</label>
+              <select id="simAction" required class="sim-input">
+                <option value="opened">Opened</option>
+                <option value="closed">Closed</option>
+                <option value="stopped">Stopped</option>
+              </select>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">API Key (If configured)</label>
+              <input type="password" id="simKey" placeholder="Your API_KEY" class="sim-input" />
+            </div>
 
-        <form id="simForm" onsubmit="submitSimulation(event)">
-          <div style="margin-bottom:12px;">
-            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door Name (Exact Match)</label>
-            <input type="text" id="simDoor" placeholder="e.g. Garage Door Left" required class="sim-input" />
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Action</label>
-            <select id="simAction" required class="sim-input">
-              <option value="opened">Opened</option>
-              <option value="closed">Closed</option>
-              <option value="stopped">Stopped</option>
-            </select>
-          </div>
-          <div style="margin-bottom:16px;">
-            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">API Key (If configured)</label>
-            <input type="password" id="simKey" placeholder="Your API_KEY" class="sim-input" />
-          </div>
+            <div style="margin-bottom: 16px; border-top: 1px solid rgba(148,163,184,0.2); margin-top: 16px; padding-top: 16px;">
+              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Or paste raw MyQ Subject line</label>
+              <input type="text" id="simSubject" placeholder="myQ Notification: Garage Door Right just opened" class="sim-input" />
+            </div>
 
-          <div style="margin-bottom: 16px; border-top: 1px solid rgba(148,163,184,0.2); margin-top: 16px; padding-top: 16px;">
-            <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Or paste raw MyQ Subject line</label>
-            <input type="text" id="simSubject" placeholder="myQ Notification: Garage Door Right just opened" class="sim-input" />
-          </div>
+            <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
+          </form>
 
-          <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
-        </form>
-
-        <div id="simResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
+          <div id="simResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
+        </div>
       </div>
     </div>
 
@@ -396,11 +394,11 @@ export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[]
       document.querySelector('.tab[onclick="switchTab(' + "'" + tabId + "'" + ')"]').classList.add('active');
 
       if (tabId === 'dashboard') {
-        document.getElementById('dashboard-tab').style.display = 'block';
-        document.getElementById('simulator-tab').style.display = 'none';
+        document.getElementById('dashboard-view').style.display = 'block';
+        document.getElementById('simulator-view').style.display = 'none';
       } else {
-        document.getElementById('dashboard-tab').style.display = 'none';
-        document.getElementById('simulator-tab').style.display = 'block';
+        document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('simulator-view').style.display = 'block';
       }
     }
 

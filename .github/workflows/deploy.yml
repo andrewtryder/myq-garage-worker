@@ -32,6 +32,11 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
 
+      - name: Inject KV namespace ID
+        if: vars.KV_NAMESPACE_ID != ''
+        run: |
+          sed -i 's/<YOUR_KV_NAMESPACE_ID>/${{ vars.KV_NAMESPACE_ID }}/g' wrangler.jsonc
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
@@ -39,6 +44,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           secrets: |
             API_KEY
-          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}" --var GARAGE_DOORS:'${{ vars.GARAGE_DOORS }}'
+          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}" --var GARAGE_DOORS:'${{ secrets.GARAGE_DOORS }}'
         env:
           API_KEY: ${{ secrets.API_KEY }}
