@@ -33,6 +33,8 @@ describe('status-page utils', () => {
       const html = renderStatusPage([], []);
       expect(html).toContain('Garage Door Status');
       expect(html).toContain('No recent activity recorded.');
+      expect(html).toContain('id="dashboard-view"');
+      expect(html).toContain('id="simulator-view"');
     });
 
     it('renders doors successfully', () => {

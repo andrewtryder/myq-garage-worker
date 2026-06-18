@@ -10,12 +10,12 @@ export async function saveDoorState(env: Env, doorKey: string, value: string): P
   // 1. Save latest state
   await env.GARAGE_STATE.put(doorKey, JSON.stringify(newState));
 
-  // 2. Fetch, update and save history log (capped to last 20 entries)
+  // 2. Fetch, update and save history log (capped to last 10 entries)
   try {
     const historyKey = `history:${doorKey}`;
     const history = await getDoorHistory(env, doorKey);
     history.unshift(newState); // prepend new state
-    const cappedHistory = history.slice(0, 20); // cap to 20
+    const cappedHistory = history.slice(0, 10); // cap to 10
     await env.GARAGE_STATE.put(historyKey, JSON.stringify(cappedHistory));
   } catch (err) {
     console.error(`Failed to update state history for ${doorKey}:`, err);

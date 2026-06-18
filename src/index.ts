@@ -222,8 +222,8 @@ export default {
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
 
-      // Cap combined history for UI at 50
-      combinedHistory = combinedHistory.slice(0, 50);
+      // Cap combined history for UI at 10
+      combinedHistory = combinedHistory.slice(0, 10);
 
       const url = new URL(request.url);
 
