@@ -2,11 +2,12 @@
 
 ## [0.1.5](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.4...myq-garage-worker-v0.1.5) (2026-06-17)
 
+
 ### Features
 
-- dynamic garage door mapping using JSON objects ([b07c36d](https://github.com/andrewtryder/myq-garage-worker/commit/b07c36db5fb6dba24d2ece6143e6b518eb7e62c3))
-- dynamic garage door parsing and rendering ([0ef3b81](https://github.com/andrewtryder/myq-garage-worker/commit/0ef3b8169125fc3d2921a30c78849179dba9673c))
-- implement optional API_KEY dashboard protection ([e74d647](https://github.com/andrewtryder/myq-garage-worker/commit/e74d647154c4bf86be842cda81ae8e8845c238ff))
+* dynamic garage door mapping using JSON objects ([b07c36d](https://github.com/andrewtryder/myq-garage-worker/commit/b07c36db5fb6dba24d2ece6143e6b518eb7e62c3))
+* dynamic garage door parsing and rendering ([0ef3b81](https://github.com/andrewtryder/myq-garage-worker/commit/0ef3b8169125fc3d2921a30c78849179dba9673c))
+* implement optional API_KEY dashboard protection ([e74d647](https://github.com/andrewtryder/myq-garage-worker/commit/e74d647154c4bf86be842cda81ae8e8845c238ff))
 
 ## [0.1.4](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.3...myq-garage-worker-v0.1.4) (2026-06-07)
 
