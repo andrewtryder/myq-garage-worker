@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.8...myq-garage-worker-v0.1.9) (2026-06-18)
+
+
+### Features
+
+* add GET /devices endpoint for Home Assistant integration ([54f7004](https://github.com/andrewtryder/myq-garage-worker/commit/54f7004ba80159fc8c9c020ea2636cd2c95d0228))
+
 ## [0.1.8](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.7...myq-garage-worker-v0.1.8) (2026-06-18)
 
 
