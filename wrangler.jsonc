@@ -16,7 +16,7 @@
   "kv_namespaces": [
     {
       "binding": "GARAGE_STATE",
-      "id": "32229217bf964d418300c81068b84447",
+      "id": "<YOUR_KV_NAMESPACE_ID>", // Run `npm run setup` to create and fill this in
     },
   ],
 }

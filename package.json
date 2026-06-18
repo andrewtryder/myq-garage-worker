@@ -1,6 +1,17 @@
 {
   "name": "myq-garage-worker",
   "version": "0.1.7",
+  "description": "Cloudflare Worker that parses myQ garage door notification emails and serves a live status dashboard",
+  "author": "Andrew Tryder",
+  "license": "MIT",
+  "homepage": "https://github.com/andrewtryder/myq-garage-worker#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewtryder/myq-garage-worker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andrewtryder/myq-garage-worker/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {

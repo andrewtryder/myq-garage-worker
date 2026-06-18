@@ -36,13 +36,12 @@ export function parseWranglerConfig(wranglerPath) {
 
   const content = fs.readFileSync(wranglerPath, 'utf8');
   const workerMatch = content.match(/"name"\s*:\s*"([^"]+)"/);
-  const kvMatch = content.match(
-    /"binding"\s*:\s*"GARAGE_STATE"[\s\S]*?"id"\s*:\s*"([a-f0-9]+)"/,
-  );
+  const kvMatch = content.match(/"binding"\s*:\s*"GARAGE_STATE"[\s\S]*?"id"\s*:\s*"([^"]+)"/);
+  const kvId = kvMatch?.[1] && kvMatch[1] !== '<YOUR_KV_NAMESPACE_ID>' ? kvMatch[1] : null;
 
   return {
     workerName: workerMatch?.[1] ?? null,
-    kvId: kvMatch?.[1] ?? null,
+    kvId,
   };
 }
 
@@ -132,7 +131,8 @@ export function fetchRemoteConfig(_workerName) {
   if (secretsRaw) {
     try {
       const secrets = JSON.parse(secretsRaw);
-      config.hasApiKey = Array.isArray(secrets) && secrets.some((secret) => secret.name === 'API_KEY');
+      config.hasApiKey =
+        Array.isArray(secrets) && secrets.some((secret) => secret.name === 'API_KEY');
     } catch {
       // Ignore malformed secret list responses.
     }
@@ -153,10 +153,7 @@ export function isKvIdValid(kvId) {
 
   try {
     const namespaces = JSON.parse(namespacesRaw);
-    return (
-      Array.isArray(namespaces) &&
-      namespaces.some((namespace) => namespace.id === kvId)
-    );
+    return Array.isArray(namespaces) && namespaces.some((namespace) => namespace.id === kvId);
   } catch {
     return false;
   }
@@ -195,7 +192,10 @@ export function updateWranglerKvId(wranglerPath, kvId) {
   }
 
   let wranglerContent = fs.readFileSync(wranglerPath, 'utf8');
-  wranglerContent = wranglerContent.replace(/"id"\s*:\s*"[a-f0-9]+"/, `"id": "${kvId}"`);
+  wranglerContent = wranglerContent.replace(
+    /"id"\s*:\s*"(?:<YOUR_KV_NAMESPACE_ID>|[a-f0-9]+)"/,
+    `"id": "${kvId}"`,
+  );
   fs.writeFileSync(wranglerPath, wranglerContent);
   return true;
 }
