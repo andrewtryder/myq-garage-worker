@@ -117,10 +117,13 @@ To set this up, add the following Repository Secrets in your GitHub repository (
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API Token (scoped to Edit Workers).
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (e.g. `0123456789abcdef0123456789abcdef`).
 
-Add the following Repository **Variable** (not secret):
+Add the following Repository **Variables** (not secrets):
 
 - `KV_NAMESPACE_ID`: Your Cloudflare KV namespace ID for `GARAGE_STATE` (replaces the placeholder in `wrangler.jsonc` during CI deploy).
-- `GARAGE_DOORS`: JSON object mapping door names to KV keys (already required for deploy).
+
+Add the following Repository **Secrets**:
+
+- `GARAGE_DOORS`: JSON object mapping door names to KV keys (passed to the worker at deploy time).
 
 ## Integrations & Automations
 
