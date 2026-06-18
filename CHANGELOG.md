@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.9...myq-garage-worker-v0.1.10) (2026-06-18)
+
+
+### Bug Fixes
+
+* **deploy:** inject GARAGE_DOORS via wrangler.jsonc to avoid shell mangling ([f5ff326](https://github.com/andrewtryder/myq-garage-worker/commit/f5ff3261f03c75bbcf43fbf860fbb46dfa6002c3))
+
 ## [0.1.9](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.8...myq-garage-worker-v0.1.9) (2026-06-18)
 
 
