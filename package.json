@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup": "node scripts/setup.js",
     "dev": "wrangler dev --remote",
     "dev:local": "wrangler dev",
     "deploy": "wrangler deploy --minify --tag v$(node -p \"require('./package.json').version\") --message \"Local deployment of v$(node -p \"require('./package.json').version\")\"",
@@ -29,7 +30,7 @@
     "prettier": "^3.8.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.60.1",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.9",
     "wrangler": "^4.4.0"
   },
   "lint-staged": {
