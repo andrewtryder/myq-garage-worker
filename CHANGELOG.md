@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.8](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.7...myq-garage-worker-v0.1.8) (2026-06-18)
+
+
+### Features
+
+* improve setup wizard and status page refinements ([5228657](https://github.com/andrewtryder/myq-garage-worker/commit/5228657fecf4a040e40c596d1c294504e389975c))
+
+
+### Bug Fixes
+
+* **ci:** read GARAGE_DOORS from repository secret ([11d4c76](https://github.com/andrewtryder/myq-garage-worker/commit/11d4c767b70c50a865d462f5815bac4d8cd33185))
+
 ## [0.1.7](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.6...myq-garage-worker-v0.1.7) (2026-06-18)
 
 ### Features
