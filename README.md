@@ -1,8 +1,16 @@
 # myq-garage-worker
 
+[![Deploy Worker](https://github.com/andrewtryder/myq-garage-worker/actions/workflows/deploy.yml/badge.svg)](https://github.com/andrewtryder/myq-garage-worker/actions/workflows/deploy.yml)
+[![GitHub release](https://img.shields.io/github/v/release/andrewtryder/myq-garage-worker)](https://github.com/andrewtryder/myq-garage-worker/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A Cloudflare Worker that integrates **myQ** notification emails and displays a clean, beautiful status dashboard. State is stored natively in Cloudflare KV.
 
+![Garage status dashboard](docs/dashboard.png)
+
 For a step-by-step guide on how to configure MyQ, Cloudflare, and email forwarding, please see the [Setup Guide](SETUP.md).
+
+> **Disclaimer:** This is an unofficial, community-maintained project. It is not affiliated with, endorsed by, or sponsored by Chamberlain Group, Inc. or its myQ brand. "myQ" is a trademark of its respective owner. This software is provided as-is, without warranty.
 
 ## Architecture
 
@@ -39,7 +47,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 }
 ```
 
-You also need to bind a KV Namespace to `GARAGE_STATE`. See `wrangler.jsonc` for details.
+You also need to bind a KV Namespace to `GARAGE_STATE`. Run `npm run setup` to create one automatically, or see `wrangler.jsonc` for manual configuration.
 
 ## Setup and Deployment
 
@@ -107,7 +115,7 @@ Deployments are automated through **GitHub Actions** when code is pushed to the 
 To set this up, add the following Repository Secrets in your GitHub repository (**Settings** -> **Secrets and variables** -> **Actions**):
 
 - `CLOUDFLARE_API_TOKEN`: Your Cloudflare API Token (scoped to Edit Workers).
-- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (e.g. `e10df460dbcb5906dc9046c03bc276c7`).
+- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (e.g. `0123456789abcdef0123456789abcdef`).
 
 ## Integrations & Automations
 
@@ -148,8 +156,13 @@ Alternatively, you can route the JSON payload through a service like `n8n` to tr
 
 #### Home Assistant Integration
 
-The API endpoint at `https://your-worker.workers.dev/?json=true` returns the current state and durations of all doors.
-You can use the Home Assistant REST integration to poll this endpoint to create sensors. The returned JSON looks like:
+For Home Assistant, use the companion **[ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage)** custom integration (available via HACS). It polls this worker's JSON API and creates cover entities with config-flow setup — no manual REST sensor YAML required.
+
+1. Deploy this worker and note your worker URL and optional `API_KEY`.
+2. Install [ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage) via HACS.
+3. Add the integration in Home Assistant (**Settings → Devices & Services → Add Integration → MyQ Garage**).
+
+**Advanced / fallback:** The API endpoint at `https://your-worker.workers.dev/?json=true` returns the current state and durations of all doors. You can poll it with the Home Assistant REST integration if you prefer a manual setup. The returned JSON looks like:
 
 ```json
 {
@@ -164,3 +177,11 @@ You can use the Home Assistant REST integration to poll this endpoint to create 
   "history": [ ... ]
 }
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and pull request guidelines.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

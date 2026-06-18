@@ -2,14 +2,13 @@
 
 ## [0.1.7](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.6...myq-garage-worker-v0.1.7) (2026-06-18)
 
-
 ### Features
 
-* add live simulator endpoint and dashboard UI ([b253c25](https://github.com/andrewtryder/myq-garage-worker/commit/b253c2531a5ea2f54ec9db5f6710cb3b2eb83e4f))
-* add live simulator endpoint and dashboard UI ([7ad1646](https://github.com/andrewtryder/myq-garage-worker/commit/7ad164620984a0f9956a678b47307b940a17b288))
-* state duration tracking and webhook alerts ([407f513](https://github.com/andrewtryder/myq-garage-worker/commit/407f513b187a0e61b9222691bd18f0f411aeb698))
-* state duration tracking and webhook alerts ([2f0478d](https://github.com/andrewtryder/myq-garage-worker/commit/2f0478d30f2c54bc18216dc086fbb6c9d46b9c17))
-* state duration tracking and webhook alerts ([06ee1d8](https://github.com/andrewtryder/myq-garage-worker/commit/06ee1d820d912192a8438f7bdcf916680a66609c))
+- add live simulator endpoint and dashboard UI ([b253c25](https://github.com/andrewtryder/myq-garage-worker/commit/b253c2531a5ea2f54ec9db5f6710cb3b2eb83e4f))
+- add live simulator endpoint and dashboard UI ([7ad1646](https://github.com/andrewtryder/myq-garage-worker/commit/7ad164620984a0f9956a678b47307b940a17b288))
+- state duration tracking and webhook alerts ([407f513](https://github.com/andrewtryder/myq-garage-worker/commit/407f513b187a0e61b9222691bd18f0f411aeb698))
+- state duration tracking and webhook alerts ([2f0478d](https://github.com/andrewtryder/myq-garage-worker/commit/2f0478d30f2c54bc18216dc086fbb6c9d46b9c17))
+- state duration tracking and webhook alerts ([06ee1d8](https://github.com/andrewtryder/myq-garage-worker/commit/06ee1d820d912192a8438f7bdcf916680a66609c))
 
 ## [0.1.6](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.5...myq-garage-worker-v0.1.6) (2026-06-18)
 
