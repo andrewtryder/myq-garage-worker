@@ -18,7 +18,7 @@
     "setup": "node scripts/setup.js",
     "dev": "wrangler dev --remote",
     "dev:local": "wrangler dev",
-    "deploy": "wrangler deploy --minify --tag v$(node -p \"require('./package.json').version\") --message \"Local deployment of v$(node -p \"require('./package.json').version\")\"",
+    "deploy": "node scripts/wrangler-deploy.js",
     "types": "wrangler types --env-interface CloudflareBindings",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

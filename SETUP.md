@@ -33,13 +33,13 @@ To feed data into the worker, we first need to instruct the MyQ app to send emai
    _Alternatively, to deploy manually without the wizard:_
 
    ```bash
-   npx wrangler login
-   npx wrangler kv:namespace create GARAGE_STATE
-   # Update wrangler.jsonc with the generated ID, then deploy:
-   npx wrangler deploy --var GARAGE_DOORS:'{"Garage Door Left": "garage-left", "Garage Door Right": "garage-right"}'
+   # Set GARAGE_DOORS in .env, then:
+   npm run deploy
    ```
 
-   _If using GitHub Actions:_ Add `GARAGE_DOORS` as a Repository Variable (not a secret) in GitHub Settings -> Secrets and variables -> Actions.
+   Or with wrangler directly — ensure `GARAGE_DOORS` is valid JSON in `wrangler.jsonc` vars (see `scripts/wrangler-deploy.js`).
+
+   _If using GitHub Actions:_ Add `GARAGE_DOORS` as a Repository Secret in GitHub Settings -> Secrets and variables -> Actions.
 
 ## 3. Configuring Cloudflare Email Routing
 

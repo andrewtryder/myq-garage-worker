@@ -8,6 +8,7 @@ import {
   loadDotEnv,
   updateWranglerKvId,
 } from './setup-config.js';
+import { deployWorker as runWranglerDeploy } from './wrangler-deploy.js';
 
 loadDotEnv();
 
@@ -251,10 +252,13 @@ async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
     return;
   }
 
-  const deployVarCmd = `npx wrangler deploy --dry-run --var GARAGE_DOORS:'${doorsJson}'`;
-
   console.log('\n🔍 Running deploy dry-run...');
-  await runCommand(deployVarCmd, 'Deploy dry-run failed. Fix the issues above before deploying.');
+  try {
+    runWranglerDeploy({ garageDoors: doorsJson, dryRun: true });
+  } catch {
+    console.error('Deploy dry-run failed. Fix the issues above before deploying.');
+    process.exit(1);
+  }
 
   const confirmDeploy = await question('\nDry-run succeeded. Proceed with deployment? (Y/n): ');
   if (confirmDeploy.toLowerCase() === 'n') {
@@ -262,9 +266,13 @@ async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
     return;
   }
 
-  const deployCmd = `npx wrangler deploy --var GARAGE_DOORS:'${doorsJson}'`;
   console.log('\n🚀 Deploying...');
-  await runCommand(deployCmd, 'Failed to deploy worker.');
+  try {
+    runWranglerDeploy({ garageDoors: doorsJson });
+  } catch {
+    console.error('Failed to deploy worker.');
+    process.exit(1);
+  }
 
   if (apiKey) {
     console.log('\n🔒 Setting API_KEY secret...');
