@@ -79,7 +79,9 @@ async function resolveAuth(existingConfig) {
 
   console.log('❌ No Cloudflare authentication detected.');
   console.log('\nTo continue, choose one of the following:');
-  console.log('  1. Add CLOUDFLARE_API_TOKEN to your .env file (recommended for CI and local deploys)');
+  console.log(
+    '  1. Add CLOUDFLARE_API_TOKEN to your .env file (recommended for CI and local deploys)',
+  );
   console.log('  2. Run: unset CLOUDFLARE_API_TOKEN && npx wrangler login');
 
   if (process.env.CLOUDFLARE_API_TOKEN) {
@@ -204,7 +206,9 @@ async function configureKvNamespace(existingConfig, mode, wranglerPath) {
   } else {
     console.log('We need a Cloudflare KV namespace to store your garage state.');
     const defaultPrompt = hasExistingKv ? '(y/N)' : '(Y/n)';
-    const createKv = await question(`Create a new KV namespace named "GARAGE_STATE"? ${defaultPrompt}: `);
+    const createKv = await question(
+      `Create a new KV namespace named "GARAGE_STATE"? ${defaultPrompt}: `,
+    );
     const shouldCreate = hasExistingKv
       ? createKv.toLowerCase() === 'y'
       : createKv.toLowerCase() !== 'n';
@@ -301,7 +305,9 @@ async function setup() {
   const wranglerPath = path.resolve(process.cwd(), 'wrangler.jsonc');
 
   console.log('Checking your existing Cloudflare configuration...');
-  console.log('(Verifying authentication, KV namespace, secrets, and deployed settings. This may take a moment.)\n');
+  console.log(
+    '(Verifying authentication, KV namespace, secrets, and deployed settings. This may take a moment.)\n',
+  );
 
   const existingConfig = await detectExistingConfig(wranglerPath);
 
