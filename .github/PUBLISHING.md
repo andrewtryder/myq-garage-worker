@@ -19,6 +19,7 @@ In **Settings → Secrets and variables → Actions**:
 | `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI              |
 | `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys |
 | `API_KEY`               | Secret   | Optional dashboard/API protection |
+| `KV_NAMESPACE_ID`       | Variable | KV namespace ID (injected at deploy time) |
 | `GARAGE_DOORS`          | Variable | JSON door name → KV key mapping   |
 
 ## Release
