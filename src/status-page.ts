@@ -1,5 +1,4 @@
 import { DoorState } from './types';
-import { AlertConfig } from './alert-config';
 
 export interface HistoryEntry extends DoorState {
   doorName: string;
@@ -12,32 +11,12 @@ export interface DoorData {
   durationText?: string;
 }
 
-export interface StatusPageOptions {
-  doorNames?: string[];
-  openDoorNames?: string[];
-  alertConfig?: AlertConfig | null;
-  apiKeyRequired?: boolean;
-}
-
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function buildDoorSelectOptions(doorNames: string[], selectedIndex = 0): string {
-  if (doorNames.length === 0) {
-    return '<option value="" disabled selected>No doors configured</option>';
-  }
-
-  return doorNames
-    .map((name, index) => {
-      const selected = index === selectedIndex ? ' selected' : '';
-      return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)}</option>`;
-    })
-    .join('\n');
 }
 
 export function formatDuration(ms: number): string {
@@ -54,40 +33,17 @@ export function formatDuration(ms: number): string {
   return parts.join(' ');
 }
 
-export function formatRelativeTime(isoDate: string, nowMs = Date.now()): string {
-  const thenMs = new Date(isoDate).getTime();
-  if (isNaN(thenMs)) return '';
-
-  const diffMs = Math.max(0, nowMs - thenMs);
-  const minutes = Math.floor(diffMs / (1000 * 60));
-
-  if (minutes < 1) return '(just now)';
-  if (minutes < 60) return `(${minutes}m ago)`;
-
-  const hours = Math.floor(minutes / 60);
-  const remMinutes = minutes % 60;
-  if (hours < 24) {
-    if (remMinutes === 0) return `(${hours}h ago)`;
-    return `(${hours}h ${remMinutes}m ago)`;
-  }
-
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  if (remHours === 0) return `(${days}d ago)`;
-  return `(${days}d ${remHours}h ago)`;
-}
-
 export function statusColor(value: string): string {
   const upperVal = value.toUpperCase();
   switch (upperVal) {
     case 'OPEN':
-      return '#ff4d4f';
+      return '#ff4d4f'; // red
     case 'CLOSED':
-      return '#52c41a';
+      return '#52c41a'; // green
     case 'STOPPED':
-      return '#faad14';
+      return '#faad14'; // amber
     default:
-      return '#8c8c8c';
+      return '#8c8c8c'; // grey / unknown
   }
 }
 
@@ -96,114 +52,7 @@ export function statusLabel(value: string | undefined): string {
   return value.toUpperCase();
 }
 
-export function renderUnlockPage(): string {
-  return `
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Unlock – Garage Status</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #1f2933, #050816);
-      color: #f9fafb;
-      display: flex;
-      min-height: 100vh;
-      align-items: center;
-      justify-content: center;
-    }
-    .wrapper {
-      max-width: 420px;
-      width: 100%;
-      padding: 24px;
-    }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
-    }
-    .subtitle {
-      margin-bottom: 24px;
-      color: #9ca3af;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .card {
-      background: rgba(15,23,42,0.9);
-      border-radius: 16px;
-      padding: 20px;
-      border: 1px solid rgba(148,163,184,0.2);
-    }
-    .sim-input {
-      width: 100%;
-      background: rgba(15,23,42,0.5);
-      border: 1px solid rgba(148,163,184,0.3);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #f9fafb;
-      font-size: 14px;
-      box-sizing: border-box;
-      outline: none;
-    }
-    .sim-btn {
-      background: #3b82f6;
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 16px;
-    }
-    label {
-      display: block;
-      margin-bottom: 4px;
-      font-size: 12px;
-      color: #9ca3af;
-    }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <h1>Garage Status</h1>
-    <div class="subtitle">Enter your API key to view the dashboard and manage alerts.</div>
-    <div class="card">
-      <form onsubmit="submitUnlock(event)">
-        <label for="unlockKey">API Key</label>
-        <input type="password" id="unlockKey" class="sim-input" placeholder="Your API_KEY" required autofocus />
-        <button type="submit" class="sim-btn">Unlock</button>
-      </form>
-    </div>
-  </div>
-  <script>
-    function submitUnlock(e) {
-      e.preventDefault();
-      const key = document.getElementById('unlockKey').value;
-      sessionStorage.setItem('apiKey', key);
-      window.location.href = '/?key=' + encodeURIComponent(key);
-    }
-  </script>
-</body>
-</html>`;
-}
-
-export function renderStatusPage(
-  doors: DoorData[] = [],
-  history: HistoryEntry[] = [],
-  options: StatusPageOptions = {},
-): string {
-  const doorNames = options.doorNames ?? doors.map((door) => door.name);
-  const alertConfig = options.alertConfig ?? null;
-  const apiKeyRequired = options.apiKeyRequired ?? false;
-  const webhookUrl = alertConfig?.webhookUrl ?? '';
-  const thresholdMinutes = alertConfig?.thresholdMinutes ?? 60;
-  const alertMethod = alertConfig?.method ?? 'POST';
-  const nowMs = Date.now();
-
+export function renderStatusPage(doors: DoorData[] = [], history: HistoryEntry[] = []): string {
   const doorsHtml = doors
     .map((door) => {
       const val = door.state.value || '';
@@ -258,26 +107,18 @@ export function renderStatusPage(
                     ? 'action-stopped'
                     : 'action-unknown';
 
-            const absoluteTime = entry.createdAt || 'N/A';
-            const relativeTime = entry.createdAt ? formatRelativeTime(entry.createdAt, nowMs) : '';
-
             return `
         <div class="timeline-item">
           <div class="timeline-marker ${doorClass}"></div>
           <div class="timeline-content">
             <span class="timeline-door">${escapeHtml(entry.doorName)}</span>
             <span class="timeline-action ${actionClass}">${statusLabel(entry.value)}</span>
-            <span class="timeline-time">${absoluteTime}${relativeTime ? ` <span class="timeline-relative">${relativeTime}</span>` : ''}</span>
+            <span class="timeline-time">${entry.createdAt || 'N/A'}</span>
           </div>
         </div>
       `;
           })
           .join('\n');
-
-  const simDoorOptions = buildDoorSelectOptions(doorNames);
-  const alertDoorOptions = buildDoorSelectOptions(doorNames);
-  const postSelected = alertMethod === 'POST' ? ' selected' : '';
-  const getSelected = alertMethod === 'GET' ? ' selected' : '';
 
   return `
 <!doctype html>
@@ -353,6 +194,7 @@ export function renderStatusPage(
     .status-stopped{ background-color: ${statusColor('STOPPED')}; }
     .status-unknown{ background-color: ${statusColor('UNKNOWN')}; }
 
+    /* History Log Timeline CSS */
     .history-card {
       margin-top: 24px;
     }
@@ -384,10 +226,11 @@ export function renderStatusPage(
     .timeline-marker.status-unknown { background-color: ${statusColor('UNKNOWN')}; }
 
     .timeline-content {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      gap: 12px;
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
       font-size: 14px;
     }
     .timeline-door {
@@ -401,7 +244,6 @@ export function renderStatusPage(
       border-radius: 4px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      justify-self: start;
     }
     .action-open {
       background: rgba(255, 77, 79, 0.15);
@@ -422,405 +264,34 @@ export function renderStatusPage(
     .timeline-time {
       font-size: 12px;
       color: #9ca3af;
-      justify-self: end;
-      text-align: right;
-      white-space: nowrap;
-    }
-    .timeline-relative {
-      color: #6b7280;
     }
     .empty-history {
       color: #9ca3af;
       font-size: 14px;
       padding: 16px 0;
     }
-
-    .tabs {
-      display: flex;
-      margin-bottom: 24px;
-      border-bottom: 1px solid rgba(148,163,184,0.2);
-    }
-    .tab {
-      padding: 8px 16px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      color: #9ca3af;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-    }
-    .tab:hover {
-      color: #e5e7eb;
-    }
-    .tab.active {
-      color: #3b82f6;
-      border-bottom-color: #3b82f6;
-    }
-    .sim-input {
-      width: 100%;
-      background: rgba(15,23,42,0.5);
-      border: 1px solid rgba(148,163,184,0.3);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #f9fafb;
-      font-size: 14px;
-      box-sizing: border-box;
-      outline: none;
-    }
-    .sim-input:focus {
-      border-color: #3b82f6;
-    }
-    .sim-btn {
-      background: #3b82f6;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      width: 100%;
-      transition: background 0.2s;
-    }
-    .sim-btn:hover {
-      background: #2563eb;
-    }
-    .sim-btn:disabled {
-      background: #475569;
-      cursor: not-allowed;
-    }
-    .sim-btn-secondary {
-      background: rgba(59, 130, 246, 0.15);
-      color: #93c5fd;
-      border: 1px solid rgba(59, 130, 246, 0.35);
-      margin-top: 8px;
-    }
-    .sim-btn-secondary:hover {
-      background: rgba(59, 130, 246, 0.25);
-    }
-    .alert-meta {
-      font-size: 13px;
-      color: #9ca3af;
-      margin-bottom: 16px;
-      line-height: 1.5;
-    }
-    .alert-result-item {
-      font-size: 13px;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(148,163,184,0.15);
-    }
-    .alert-result-item:last-child {
-      border-bottom: none;
-    }
-    .alert-success { color: #52c41a; }
-    .alert-skipped { color: #9ca3af; }
-    .alert-error { color: #ff4d4f; }
-
   </style>
 </head>
 <body>
   <div class="wrapper">
-
-    <div class="tabs">
-      <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</div>
-      <div class="tab" data-tab="simulator" onclick="switchTab('simulator')">Simulator</div>
-      <div class="tab" data-tab="alerts" onclick="switchTab('alerts')">Alerts</div>
+    <h1>Garage Door Status</h1>
+    <div class="subtitle">
+      Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
+    </div>
+    <div class="grid">
+      ${doorsHtml}
     </div>
 
-    <div id="dashboard-view">
-      <h1>Garage Door Status</h1>
-      <div class="subtitle">
-        Source: MyQ email notifications → Cloudflare Email Worker → Cloudflare KV.
+    <!-- History Log Section -->
+    <div class="card history-card">
+      <div class="card-header">
+        <div class="door-name">Recent Activity Log</div>
       </div>
-      <div class="grid">
-        ${doorsHtml}
-      </div>
-
-      <div class="card history-card">
-        <div class="card-header">
-          <div class="door-name">Recent Activity Log</div>
-        </div>
-        <div class="timeline">
-          ${historyHtml}
-        </div>
+      <div class="timeline">
+        ${historyHtml}
       </div>
     </div>
-
-    <div id="simulator-view" style="display: none;">
-      <h1>Test Simulator</h1>
-      <div class="subtitle">
-        Send a simulated test event to check your configuration without triggering a real garage door.
-      </div>
-      <div class="card history-card">
-        <div class="simulator-body">
-          <form id="simForm" onsubmit="submitSimulation(event)">
-            <div style="margin-bottom:12px;">
-              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door</label>
-              <select id="simDoor" required class="sim-input">
-                ${simDoorOptions}
-              </select>
-            </div>
-            <div style="margin-bottom:16px;">
-              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Action</label>
-              <select id="simAction" required class="sim-input">
-                <option value="opened">Opened</option>
-                <option value="closed">Closed</option>
-                <option value="stopped">Stopped</option>
-              </select>
-            </div>
-
-            <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
-          </form>
-
-          <div id="simResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="alerts-view" style="display: none;">
-      <h1>Alerts</h1>
-      <div class="subtitle">
-        Lightweight left-open webhook for ntfy.sh, Pushover, Apprise, and similar services.
-        Use a secret topic URL — the cron job checks every 15 minutes.
-      </div>
-      <div class="card history-card">
-        <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Webhook URL</label>
-          <input type="url" id="alertWebhookUrl" value="${escapeHtml(webhookUrl)}" placeholder="https://ntfy.sh/your-secret-topic" class="sim-input" />
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Threshold (minutes)</label>
-          <input type="number" id="alertThreshold" min="1" value="${thresholdMinutes}" class="sim-input" />
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">HTTP method</label>
-          <select id="alertMethod" class="sim-input">
-            <option value="POST"${postSelected}>POST (JSON body)</option>
-            <option value="GET"${getSelected}>GET (query params)</option>
-          </select>
-        </div>
-
-        <div style="margin-bottom:16px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door (for test payload)</label>
-          <select id="alertDoor" class="sim-input">
-            ${alertDoorOptions}
-          </select>
-        </div>
-
-        <button type="button" id="alertSaveBtn" class="sim-btn" onclick="saveAlertConfig()">Save</button>
-        <button type="button" id="alertTestBtn" class="sim-btn sim-btn-secondary" onclick="testAlertWebhook()">Test webhook</button>
-
-        <div id="alertResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
-      </div>
-    </div>
-
   </div>
-
-  <script>
-    const apiKeyRequired = ${apiKeyRequired ? 'true' : 'false'};
-
-    (function bootstrapApiKey() {
-      const params = new URLSearchParams(window.location.search);
-      const keyFromUrl = params.get('key');
-      if (keyFromUrl) {
-        sessionStorage.setItem('apiKey', keyFromUrl);
-        params.delete('key');
-        const query = params.toString();
-        const newUrl = window.location.pathname + (query ? '?' + query : '');
-        history.replaceState({}, '', newUrl);
-      }
-    })();
-
-    function getApiKey() {
-      return sessionStorage.getItem('apiKey') || '';
-    }
-
-    function authHeaders(extra) {
-      const headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
-      if (apiKeyRequired) {
-        const key = getApiKey();
-        if (key) headers['Authorization'] = 'Bearer ' + key;
-      }
-      return headers;
-    }
-
-    async function authFetch(path, options) {
-      const opts = options || {};
-      return fetch(path, {
-        method: opts.method || 'GET',
-        headers: authHeaders(opts.headers),
-        body: opts.body
-      });
-    }
-
-    function switchTab(tabId) {
-      const views = ['dashboard', 'simulator', 'alerts'];
-      views.forEach(function(viewId) {
-        document.getElementById(viewId + '-view').style.display = viewId === tabId ? 'block' : 'none';
-      });
-
-      document.querySelectorAll('.tab').forEach(function(tab) {
-        tab.classList.toggle('active', tab.getAttribute('data-tab') === tabId);
-      });
-    }
-
-    function getAlertFormValues() {
-      return {
-        webhookUrl: document.getElementById('alertWebhookUrl').value.trim(),
-        thresholdMinutes: parseInt(document.getElementById('alertThreshold').value, 10),
-        method: document.getElementById('alertMethod').value,
-        doorName: document.getElementById('alertDoor').value
-      };
-    }
-
-    function showAlertResult(html, isError) {
-      const resDiv = document.getElementById('alertResult');
-      resDiv.style.display = 'block';
-      if (isError) {
-        resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
-        resDiv.style.color = '#ff4d4f';
-        resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-      } else {
-        resDiv.style.background = 'rgba(15,23,42,0.5)';
-        resDiv.style.color = '#e5e7eb';
-        resDiv.style.border = '1px solid rgba(148,163,184,0.3)';
-      }
-      resDiv.innerHTML = html;
-    }
-
-    async function submitSimulation(e) {
-      e.preventDefault();
-      const btn = document.getElementById('simBtn');
-      const resDiv = document.getElementById('simResult');
-
-      btn.disabled = true;
-      btn.textContent = 'Simulating...';
-      resDiv.style.display = 'none';
-
-      const payload = {
-        deviceName: document.getElementById('simDoor').value,
-        action: document.getElementById('simAction').value,
-      };
-
-      try {
-        const response = await authFetch('/simulate', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-
-        const data = await response.json();
-        resDiv.style.display = 'block';
-
-        if (response.ok) {
-          resDiv.style.background = 'rgba(82, 196, 26, 0.15)';
-          resDiv.style.color = '#52c41a';
-          resDiv.style.border = '1px solid rgba(82, 196, 26, 0.3)';
-          resDiv.textContent = 'Success! ' + data.door + ' state updated to ' + data.state;
-          setTimeout(function() { window.location.reload(); }, 1500);
-        } else {
-          resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
-          resDiv.style.color = '#ff4d4f';
-          resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-          resDiv.textContent = 'Error: ' + (data.error || response.statusText || 'Unknown error');
-        }
-      } catch (err) {
-        resDiv.style.display = 'block';
-        resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
-        resDiv.style.color = '#ff4d4f';
-        resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-        resDiv.textContent = 'Network error: ' + err.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Simulate Event';
-      }
-    }
-
-    function formatTestResult(result) {
-      if (result.sent) {
-        return '<div class="alert-success">Webhook sent (HTTP ' + result.webhookStatus + ')</div>';
-      }
-      if (result.error) {
-        return '<div class="alert-error">' + result.error + '</div>';
-      }
-      return '<div class="alert-skipped">' + (result.skippedReason || 'Skipped') + '</div>';
-    }
-
-    async function saveAlertConfig() {
-      const btn = document.getElementById('alertSaveBtn');
-      const values = getAlertFormValues();
-
-      if (!values.webhookUrl) {
-        showAlertResult('Webhook URL is required.', true);
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
-
-      try {
-        const response = await authFetch('/alert-config', {
-          method: 'POST',
-          body: JSON.stringify({
-            webhookUrl: values.webhookUrl,
-            thresholdMinutes: values.thresholdMinutes,
-            method: values.method
-          })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-          showAlertResult('<div class="alert-success">Alert settings saved.</div>', false);
-        } else {
-          showAlertResult('<div class="alert-error">' + (data.error || 'Save failed') + '</div>', true);
-        }
-      } catch (err) {
-        showAlertResult('Network error: ' + err.message, true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Save';
-      }
-    }
-
-    async function testAlertWebhook() {
-      const btn = document.getElementById('alertTestBtn');
-      const values = getAlertFormValues();
-
-      if (!values.webhookUrl) {
-        showAlertResult('Webhook URL is required.', true);
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Testing...';
-
-      try {
-        const response = await authFetch('/test-alert', {
-          method: 'POST',
-          body: JSON.stringify({
-            webhookUrl: values.webhookUrl,
-            thresholdMinutes: values.thresholdMinutes,
-            method: values.method,
-            doorName: values.doorName
-          })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-          showAlertResult(formatTestResult(data.result), false);
-        } else {
-          showAlertResult('<div class="alert-error">' + (data.error || 'Test failed') + '</div>', true);
-        }
-      } catch (err) {
-        showAlertResult('Network error: ' + err.message, true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Test webhook';
-      }
-    }
-  </script>
-
 </body>
 </html>`;
 }

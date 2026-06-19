@@ -1,24 +1,12 @@
 {
   "name": "myq-garage-worker",
-  "version": "1.0.0",
-  "description": "Cloudflare Worker that parses myQ garage door notification emails and serves a live status dashboard",
-  "author": "Andrew Tryder",
-  "license": "MIT",
-  "homepage": "https://github.com/andrewtryder/myq-garage-worker#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/andrewtryder/myq-garage-worker.git"
-  },
-  "bugs": {
-    "url": "https://github.com/andrewtryder/myq-garage-worker/issues"
-  },
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "node scripts/setup.js",
     "dev": "wrangler dev --remote",
     "dev:local": "wrangler dev",
-    "deploy": "node scripts/wrangler-deploy.js",
+    "deploy": "wrangler deploy --minify --tag v$(node -p \"require('./package.json').version\") --message \"Local deployment of v$(node -p \"require('./package.json').version\")\"",
     "types": "wrangler types --env-interface CloudflareBindings",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -41,7 +29,7 @@
     "prettier": "^3.8.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.60.1",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.8",
     "wrangler": "^4.4.0"
   },
   "lint-staged": {

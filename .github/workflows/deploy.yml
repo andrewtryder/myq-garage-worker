@@ -32,12 +32,6 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
 
-      - name: Inject deploy vars
-        env:
-          GARAGE_DOORS: ${{ secrets.GARAGE_DOORS }}
-          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
-        run: node scripts/wrangler-deploy.js --inject-only
-
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
@@ -45,6 +39,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           secrets: |
             API_KEY
-          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}"
+          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}" --var GARAGE_DOORS:'${{ vars.GARAGE_DOORS }}'
         env:
           API_KEY: ${{ secrets.API_KEY }}

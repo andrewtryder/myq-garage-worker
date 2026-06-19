@@ -107,7 +107,7 @@ describe('myq-garage-worker integration tests', () => {
 
       const text = await response.text();
       expect(text).toContain('Main Garage');
-      expect(text).not.toContain('"door-name">Garage Door Right');
+      expect(text).not.toContain('Garage Door Right');
     });
 
     it('serves JSON when ?json=true is provided', async () => {
@@ -140,170 +140,36 @@ describe('myq-garage-worker integration tests', () => {
       get GARAGE_STATE() {
         return mockKV;
       },
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
+      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       API_KEY: 'super-secret',
     };
 
-    it('returns unlock HTML without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('text/html');
-      const html = await response.text();
-      expect(html).toContain('Unlock');
-      expect(html).not.toContain('Garage Door Left');
-    });
-
-    it('returns dashboard HTML with auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/?key=super-secret');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(200);
-      const html = await response.text();
-      expect(html).toContain('Garage Door Status');
-      expect(html).not.toContain('Unlock');
-    });
-
-    it('returns 401 for ?json=true without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/?json=true');
+    it('returns 401 when API_KEY is set but not provided', async () => {
+      const req = new Request('https://worker.dev');
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
       expect(response.status).toBe(401);
-    });
-
-    it('returns 401 for GET /devices without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/devices');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(401);
-    });
-
-    it('allows ?json=true with Authorization Bearer token', async () => {
-      const req = new Request('https://worker.dev/?json=true', {
-        headers: { Authorization: 'Bearer super-secret' },
-      });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('application/json');
     });
 
     it('allows access with query param ?key=', async () => {
-      const req = new Request('https://worker.dev/?json=true&key=super-secret');
+      const req = new Request('https://worker.dev?key=super-secret');
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
       expect(response.status).toBe(200);
     });
 
-    it('allows access with x-api-key header on /devices', async () => {
-      const req = new Request('https://worker.dev/devices', {
+    it('allows access with x-api-key header', async () => {
+      const req = new Request('https://worker.dev', {
         headers: { 'x-api-key': 'super-secret' },
       });
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
       expect(response.status).toBe(200);
     });
 
-    it('GET /devices with Bearer auth returns HA-compatible JSON array', async () => {
-      kvStore.set(
-        'garage-left',
-        JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:00.000Z' }),
-      );
-      kvStore.set(
-        'garage-right',
-        JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:00.000Z' }),
-      );
-
-      const req = new Request('https://worker.dev/devices', {
+    it('allows access with Authorization Bearer token', async () => {
+      const req = new Request('https://worker.dev', {
         headers: { Authorization: 'Bearer super-secret' },
       });
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
-
       expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('application/json');
-
-      const json = (await response.json()) as Array<{ id: string; name: string; status: string }>;
-      expect(Array.isArray(json)).toBe(true);
-      expect(json).toEqual([
-        { id: 'garage-left', name: 'Garage Door Left', status: 'open' },
-        { id: 'garage-right', name: 'Garage Door Right', status: 'closed' },
-      ]);
-    });
-
-    it('omits STOPPED doors from GET /devices response', async () => {
-      kvStore.set(
-        'garage-left',
-        JSON.stringify({ value: 'STOPPED', createdAt: '2023-01-01T00:00:00.000Z' }),
-      );
-      kvStore.set(
-        'garage-right',
-        JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:00.000Z' }),
-      );
-
-      const req = new Request('https://worker.dev/devices', {
-        headers: { Authorization: 'Bearer super-secret' },
-      });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      const json = (await response.json()) as Array<{ id: string; name: string; status: string }>;
-
-      expect(json).toEqual([{ id: 'garage-right', name: 'Garage Door Right', status: 'closed' }]);
-    });
-
-    it('returns 401 for POST /test-alert without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/test-alert', { method: 'POST', body: '{}' });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(401);
-    });
-
-    it('POST /test-alert sends webhook with Bearer auth', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(() =>
-          Promise.resolve({
-            ok: true,
-            status: 200,
-          }),
-        ),
-      );
-
-      const req = new Request('https://worker.dev/test-alert', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer super-secret',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          webhookUrl: 'https://example.com/webhook',
-          thresholdMinutes: 60,
-          method: 'POST',
-          doorName: 'Garage Door Left',
-        }),
-      });
-
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      const json = (await response.json()) as { result: { sent: boolean } };
-
-      expect(response.status).toBe(200);
-      expect(json.result.sent).toBe(true);
-      expect(fetch).toHaveBeenCalledTimes(1);
-
-      vi.unstubAllGlobals();
-    });
-
-    it('POST /alert-config saves config to KV with Bearer auth', async () => {
-      const req = new Request('https://worker.dev/alert-config', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer super-secret',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          webhookUrl: 'https://example.com/webhook',
-          thresholdMinutes: 45,
-          method: 'GET',
-        }),
-      });
-
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      const json = (await response.json()) as { success: boolean; config: { method: string } };
-
-      expect(response.status).toBe(200);
-      expect(json.success).toBe(true);
-      expect(json.config.method).toBe('GET');
     });
   });
 });

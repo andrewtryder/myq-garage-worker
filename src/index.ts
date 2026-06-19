@@ -1,16 +1,13 @@
 import { Env } from './types';
-import { saveDoorState } from './storage';
+import { getDoorState, saveDoorState, getDoorHistory } from './storage';
 import { mapActionToStatus, parseMyQSubject, resolveDoorKey } from './email-parser';
-import { renderStatusPage, renderUnlockPage } from './status-page';
-import { runOpenDoorAlerts, testAlert } from './alerts';
-import { getAlertConfig, resolveAlertConfigFromBody, saveAlertConfig } from './alert-config';
-import { buildHaDevices, loadAllDoors, routeRequiresAuth } from './doors';
+import { renderStatusPage, HistoryEntry, DoorData, formatDuration } from './status-page';
 
 export type { Env };
 
 function isAuthorized(request: Request, env: Env): boolean {
   if (!env.API_KEY) {
-    return true;
+    return true; // No API key configured, leave unprotected
   }
 
   const url = new URL(request.url);
@@ -28,23 +25,8 @@ function isAuthorized(request: Request, env: Env): boolean {
   return false;
 }
 
-function unauthorizedResponse(request: Request, _env: Env): Response {
-  const url = new URL(request.url);
-  if (
-    request.method === 'GET' &&
-    url.pathname === '/' &&
-    url.searchParams.get('json') !== 'true'
-  ) {
-    return new Response(renderUnlockPage(), {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
-  }
-
-  return new Response('Unauthorized', { status: 401 });
-}
-
 export default {
+  // Handles incoming emails from Cloudflare Email Routing
   async email(message: ForwardableEmailMessage, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
       const fromHeader = message.headers.get('from') || '';
@@ -76,135 +58,174 @@ export default {
     }
   },
 
+  // HTTP handler – serves a status page or raw JSON at your workers.dev URL
+
+  // Scheduled handler - triggered by Cloudflare Cron Triggers to alert on stale states
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const config = await getAlertConfig(env);
-    if (!config) {
-      console.log('No alert webhook configured, skipping scheduled alert check.');
+    if (!env.WEBHOOK_URL) {
+      console.log('No WEBHOOK_URL configured, skipping scheduled alert check.');
       return;
     }
 
+    const thresholdStr = env.ALERT_OPEN_THRESHOLD_MINUTES || '60';
+    const thresholdMinutes = parseInt(thresholdStr, 10);
+
+    if (isNaN(thresholdMinutes) || thresholdMinutes <= 0) {
+      console.error('Invalid ALERT_OPEN_THRESHOLD_MINUTES value:', thresholdStr);
+      return;
+    }
+
+    const thresholdMs = thresholdMinutes * 60 * 1000;
+    const nowMs = Date.now();
+
     try {
-      await runOpenDoorAlerts(env);
+      let configuredDoors: Record<string, string> = {};
+
+      if (typeof env.GARAGE_DOORS === 'string') {
+        try {
+          configuredDoors = JSON.parse(env.GARAGE_DOORS);
+        } catch {
+          console.error('Failed to parse GARAGE_DOORS JSON string');
+          return;
+        }
+      } else if (
+        typeof env.GARAGE_DOORS === 'object' &&
+        env.GARAGE_DOORS !== null &&
+        !Array.isArray(env.GARAGE_DOORS)
+      ) {
+        configuredDoors = env.GARAGE_DOORS;
+      }
+
+      for (const [doorName, doorKey] of Object.entries(configuredDoors)) {
+        const state = await getDoorState(env, doorKey);
+
+        if (state.value === 'OPEN' && state.createdAt) {
+          const createdAtMs = new Date(state.createdAt).getTime();
+
+          if (!isNaN(createdAtMs)) {
+            const durationMs = nowMs - createdAtMs;
+
+            if (durationMs > thresholdMs) {
+              const durationText = formatDuration(durationMs);
+              console.log(`Alert! ${doorName} has been open for ${durationText}.`);
+
+              // Post to Webhook (Apprise/ntfy.sh/HomeAssistant friendly)
+              const payload = {
+                title: 'Garage Door Alert',
+                message: `${doorName} has been open for ${durationText}.`,
+                door: doorName,
+                state: state.value,
+                durationMs: durationMs,
+                durationText: durationText,
+              };
+
+              try {
+                // We send it as JSON so systems like Apprise and n8n can easily parse it
+                const response = await fetch(env.WEBHOOK_URL, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                  console.error(
+                    `Failed to send webhook for ${doorName}. Status: ${response.status}`,
+                  );
+                } else {
+                  console.log(`Successfully sent webhook for ${doorName}.`);
+                }
+              } catch (webhookErr) {
+                console.error(`Error sending webhook for ${doorName}:`, webhookErr);
+              }
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Error in scheduled handler:', err);
     }
   },
 
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    if (routeRequiresAuth(request, env) && !isAuthorized(request, env)) {
-      return unauthorizedResponse(request, env);
+    if (!isAuthorized(request, env)) {
+      return new Response('Unauthorized', { status: 401 });
     }
 
     try {
+      let configuredDoors: Record<string, string> = {};
+
+      if (typeof env.GARAGE_DOORS === 'string') {
+        try {
+          configuredDoors = JSON.parse(env.GARAGE_DOORS);
+        } catch {
+          console.error('Failed to parse GARAGE_DOORS JSON string');
+        }
+      } else if (
+        typeof env.GARAGE_DOORS === 'object' &&
+        env.GARAGE_DOORS !== null &&
+        !Array.isArray(env.GARAGE_DOORS)
+      ) {
+        configuredDoors = env.GARAGE_DOORS;
+      }
+
+      // Fetch state and history for all configured doors
+      const doorDataPromises = Object.entries(configuredDoors).map(async ([doorName, doorKey]) => {
+        const [state, history] = await Promise.all([
+          getDoorState(env, doorKey),
+          getDoorHistory(env, doorKey),
+        ]);
+        return {
+          name: doorName,
+          key: doorKey,
+          state,
+          history,
+        };
+      });
+
+      const allDoorData = await Promise.all(doorDataPromises);
+
+      // Map to Data structure for UI
+      const nowMs = Date.now();
+      const doors: DoorData[] = allDoorData.map((d) => {
+        let durationMs: number | undefined;
+        let durationText: string | undefined;
+
+        if (d.state.createdAt) {
+          const createdAtMs = new Date(d.state.createdAt).getTime();
+          if (!isNaN(createdAtMs)) {
+            durationMs = nowMs - createdAtMs;
+            durationText = formatDuration(durationMs);
+          }
+        }
+
+        return {
+          name: d.name,
+          state: d.state,
+          durationMs,
+          durationText,
+        };
+      });
+
+      // Merge and sort histories descending by timestamp
+      let combinedHistory: HistoryEntry[] = [];
+      allDoorData.forEach((d) => {
+        const doorHistory: HistoryEntry[] = d.history.map((item) => ({
+          ...item,
+          doorName: d.name,
+        }));
+        combinedHistory = combinedHistory.concat(doorHistory);
+      });
+
+      combinedHistory.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      // Cap combined history for UI at 50
+      combinedHistory = combinedHistory.slice(0, 50);
+
       const url = new URL(request.url);
-
-      if (request.method === 'POST' && url.pathname === '/simulate') {
-        try {
-          const body = (await request.json()) as {
-            subject?: string;
-            deviceName?: string;
-            action?: string;
-          };
-
-          let deviceName = body.deviceName;
-          let action = body.action;
-
-          if (body.subject) {
-            const parsed = parseMyQSubject(body.subject);
-            if (parsed) {
-              deviceName = parsed.deviceName;
-              action = parsed.action;
-            }
-          }
-
-          if (!deviceName || !action) {
-            return new Response(
-              JSON.stringify({ error: 'Missing deviceName or action (or valid subject)' }),
-              { status: 400, headers: { 'Content-Type': 'application/json' } },
-            );
-          }
-
-          const doorKey = resolveDoorKey(deviceName, env);
-          if (!doorKey) {
-            return new Response(JSON.stringify({ error: `Unknown device name: ${deviceName}` }), {
-              status: 404,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-
-          const value = mapActionToStatus(action);
-          await saveDoorState(env, doorKey, value);
-
-          return new Response(JSON.stringify({ success: true, door: deviceName, state: value }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        } catch {
-          return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      }
-
-      if (request.method === 'POST' && url.pathname === '/alert-config') {
-        try {
-          const body = (await request.json()) as Record<string, unknown>;
-          const config = await saveAlertConfig(env, body);
-          return new Response(JSON.stringify({ success: true, config }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Invalid alert configuration';
-          return new Response(JSON.stringify({ error: message }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      }
-
-      if (request.method === 'POST' && url.pathname === '/test-alert') {
-        try {
-          const body = (await request.json()) as Record<string, unknown>;
-          const saved = await getAlertConfig(env);
-          const config = resolveAlertConfigFromBody(body, saved);
-
-          if (!config) {
-            return new Response(JSON.stringify({ error: 'Webhook URL is required' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-
-          const doorName =
-            typeof body.doorName === 'string' && body.doorName.trim()
-              ? body.doorName.trim()
-              : undefined;
-          const result = await testAlert(config, doorName);
-
-          return new Response(JSON.stringify({ result }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        } catch {
-          return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      }
-
-      const { allDoorData, doors, combinedHistory } = await loadAllDoors(env);
-
-      if (request.method === 'GET' && url.pathname === '/devices') {
-        const devices = buildHaDevices(allDoorData);
-        return new Response(JSON.stringify(devices), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
       const isJson = url.searchParams.get('json') === 'true';
 
       if (isJson) {
@@ -214,18 +235,7 @@ export default {
         });
       }
 
-      const openDoorNames = allDoorData
-        .filter((door) => door.state.value === 'OPEN')
-        .map((door) => door.name);
-
-      const alertConfig = await getAlertConfig(env);
-
-      const html = renderStatusPage(doors, combinedHistory, {
-        doorNames: allDoorData.map((door) => door.name),
-        openDoorNames,
-        alertConfig,
-        apiKeyRequired: !!env.API_KEY,
-      });
+      const html = renderStatusPage(doors, combinedHistory);
 
       return new Response(html, {
         status: 200,

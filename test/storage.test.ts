@@ -40,8 +40,8 @@ describe('storage KV tests', () => {
       expect(parsedHistory[0].value).toBe('OPEN');
     });
 
-    it('caps history array to 10 entries', async () => {
-      const initialHistory: DoorState[] = Array(10)
+    it('caps history array to 20 entries', async () => {
+      const initialHistory: DoorState[] = Array(20)
         .fill(null)
         .map((_, i) => ({
           value: 'CLOSED',
@@ -53,7 +53,7 @@ describe('storage KV tests', () => {
       await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
       const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
-      expect(parsedHistory.length).toBe(10);
+      expect(parsedHistory.length).toBe(20);
       // Ensure the newest entry is at the top
       expect(parsedHistory[0].value).toBe('OPEN');
     });

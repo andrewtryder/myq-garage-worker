@@ -20,26 +20,19 @@ To feed data into the worker, we first need to instruct the MyQ app to send emai
    ```bash
    npm install
    ```
-3. Run the interactive setup wizard, which will guide you through mapping your garage doors, creating the KV namespace, and deploying the worker:
+3. Authenticate your local Wrangler CLI with Cloudflare:
+   ```bash
+   npx wrangler login
+   ```
+4. To configure your specific garage doors locally and deploy, you can pass the configuration as a variable during deployment. You must map the exact name of the door from the MyQ app to a safe database key:
 
    ```bash
-   npm run setup
+   npx wrangler deploy --var GARAGE_DOORS:'{"Garage Door Left": "garage-left", "Garage Door Right": "garage-right"}'
    ```
 
-   **Re-running the wizard:** If you already have a Worker deployed, the wizard detects your existing KV namespace, secrets, and `GARAGE_DOORS` configuration. It defaults to reusing that infrastructure and will not recreate KV unless you explicitly ask it to. A deploy dry-run runs before any live deployment.
+   _Alternatively, if using GitHub Actions:_ Add `GARAGE_DOORS` as a Repository Variable (not a secret) in GitHub Settings -> Secrets and variables -> Actions.
 
-   **Authentication:** You can authenticate with a `CLOUDFLARE_API_TOKEN` in a `.env` file (recommended) or with `npx wrangler login`. If `CLOUDFLARE_API_TOKEN` is set, the wizard uses it directly and will not attempt OAuth login.
-
-   _Alternatively, to deploy manually without the wizard:_
-
-   ```bash
-   # Set GARAGE_DOORS in .env, then:
-   npm run deploy
-   ```
-
-   Or with wrangler directly — ensure `GARAGE_DOORS` is valid JSON in `wrangler.jsonc` vars (see `scripts/wrangler-deploy.js`).
-
-   _If using GitHub Actions:_ Add `GARAGE_DOORS` as a Repository Secret in GitHub Settings -> Secrets and variables -> Actions.
+   _Alternatively, via Cloudflare Dashboard:_ After deploying once, go to your Worker -> Settings -> Variables and add `GARAGE_DOORS` there.
 
 ## 3. Configuring Cloudflare Email Routing
 
@@ -64,26 +57,20 @@ Finally, you need to forward the notifications from your personal email to the C
 1. Go to Gmail Settings (gear icon) -> **See all settings**.
 2. Go to the **Forwarding and POP/IMAP** tab.
 3. Click **Add a forwarding address** and enter the Cloudflare email address you created (e.g., `garage@yourdomain.com`).
-4. Google will send a verification code to that address. Since the worker isn't set up to forward that code back to you, you will need to temporarily point that Cloudflare email address to your personal inbox, get the code, verify it, and then point it back to the Worker.
+4. Google will send a verification code to that address. Since the worker isn't set up to forward that code back to you, you may need to temporarily point that Cloudflare email address to your personal inbox, get the code, verify it, and then point it back to the Worker.
 5. Once verified, go to the Gmail search bar, click the filter icon, and create a filter:
    - **From**: `notification@myq.com`
    - Click **Create filter**.
    - Check **Forward it to:** and select your Cloudflare email address.
 6. Click **Create filter**.
 
-You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your status dashboard!
+You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your public status dashboard!
 
-## 5. Protect routes with an API Key
+## 5. (Optional) Protect your dashboard with an API Key
 
-Set an `API_KEY` secret to protect the dashboard and API routes:
+To restrict access to the web dashboard, create a secret `API_KEY`.
 
 - _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
 - _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.
 
-When `API_KEY` is set:
-
-- **`GET /`** shows an unlock page until you enter your key (or visit with `?key=YOUR_KEY`).
-- **`GET /devices`** requires auth — Home Assistant sends `Authorization: Bearer YOUR_API_KEY`.
-- **`POST /simulate`**, **`POST /alert-config`**, and **`POST /test-alert`** require auth for the Simulator and Alerts tabs.
-
-Configure left-open webhook alerts on the dashboard **Alerts** tab (settings are saved to KV, not environment variables).
+Once configured, you must access your dashboard URL by appending the key: `https://your-worker.workers.dev/?key=YOUR_API_KEY`.
