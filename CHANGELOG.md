@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.10...myq-garage-worker-v0.2.0) (2026-06-19)
+## [1.0.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.10...myq-garage-worker-v1.0.0) (2026-06-19)
 
 
 ### ⚠ BREAKING CHANGES
