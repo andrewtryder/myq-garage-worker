@@ -33,9 +33,9 @@ If you are using this worker for personal use, set `API_KEY` to protect the dash
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
-| Variable Name  | Description                                                                                                                                                                                               |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                 |
+| Variable Name  | Description                                                                                                                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                                              |
 | `API_KEY`      | _(Optional)_ Secret key protecting the dashboard (`GET /`), API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /alert-config`, `POST /test-alert`). Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
 
 **Example configuration:**

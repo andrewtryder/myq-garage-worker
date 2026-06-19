@@ -2,10 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import {
-  injectDeployVars,
-  removeInjectedGarageDoors,
-} from '../scripts/wrangler-deploy.js';
+import { injectDeployVars, removeInjectedGarageDoors } from '../scripts/wrangler-deploy.js';
 
 const BASE_WRANGLER = `{
   "$schema": "node_modules/wrangler/config-schema.json",

@@ -23,7 +23,9 @@ describe('alert-config', () => {
   });
 
   it('rejects invalid webhook URLs and thresholds', () => {
-    expect(validateAlertConfig({ webhookUrl: '', thresholdMinutes: 60, method: 'POST' })).toBeNull();
+    expect(
+      validateAlertConfig({ webhookUrl: '', thresholdMinutes: 60, method: 'POST' }),
+    ).toBeNull();
     expect(
       validateAlertConfig({ webhookUrl: 'ftp://bad', thresholdMinutes: 60, method: 'POST' }),
     ).toBeNull();

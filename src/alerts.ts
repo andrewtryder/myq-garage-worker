@@ -41,10 +41,7 @@ export async function sendWebhook(config: AlertConfig, payload: AlertPayload): P
   });
 }
 
-export async function testAlert(
-  config: AlertConfig,
-  doorName?: string,
-): Promise<AlertResult> {
+export async function testAlert(config: AlertConfig, doorName?: string): Promise<AlertResult> {
   const payload: AlertPayload = {
     title: 'Garage Door Alert',
     message: doorName
