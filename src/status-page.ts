@@ -1,4 +1,5 @@
 import { DoorState } from './types';
+import { AlertConfig } from './alert-config';
 
 export interface HistoryEntry extends DoorState {
   doorName: string;
@@ -14,8 +15,8 @@ export interface DoorData {
 export interface StatusPageOptions {
   doorNames?: string[];
   openDoorNames?: string[];
-  webhookConfigured?: boolean;
-  alertThresholdMinutes?: number;
+  alertConfig?: AlertConfig | null;
+  apiKeyRequired?: boolean;
 }
 
 function escapeHtml(value: string): string {
@@ -26,22 +27,15 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function buildDoorSelectOptions(
-  doorNames: string[],
-  openDoorNames: string[] = [],
-  forForce = false,
-): string {
+function buildDoorSelectOptions(doorNames: string[], selectedIndex = 0): string {
   if (doorNames.length === 0) {
     return '<option value="" disabled selected>No doors configured</option>';
   }
 
   return doorNames
     .map((name, index) => {
-      const isOpen = openDoorNames.includes(name);
-      const disabled = forForce && !isOpen ? ' disabled' : '';
-      const suffix = forForce && !isOpen ? ' (not open)' : '';
-      const selected = index === 0 && (!forForce || isOpen) ? ' selected' : '';
-      return `<option value="${escapeHtml(name)}"${disabled}${selected}>${escapeHtml(name)}${suffix}</option>`;
+      const selected = index === selectedIndex ? ' selected' : '';
+      return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)}</option>`;
     })
     .join('\n');
 }
@@ -102,17 +96,112 @@ export function statusLabel(value: string | undefined): string {
   return value.toUpperCase();
 }
 
+export function renderUnlockPage(): string {
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Unlock – Garage Status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1f2933, #050816);
+      color: #f9fafb;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+    }
+    .wrapper {
+      max-width: 420px;
+      width: 100%;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+    .subtitle {
+      margin-bottom: 24px;
+      color: #9ca3af;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .card {
+      background: rgba(15,23,42,0.9);
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid rgba(148,163,184,0.2);
+    }
+    .sim-input {
+      width: 100%;
+      background: rgba(15,23,42,0.5);
+      border: 1px solid rgba(148,163,184,0.3);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #f9fafb;
+      font-size: 14px;
+      box-sizing: border-box;
+      outline: none;
+    }
+    .sim-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 16px;
+    }
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>Garage Status</h1>
+    <div class="subtitle">Enter your API key to view the dashboard and manage alerts.</div>
+    <div class="card">
+      <form onsubmit="submitUnlock(event)">
+        <label for="unlockKey">API Key</label>
+        <input type="password" id="unlockKey" class="sim-input" placeholder="Your API_KEY" required autofocus />
+        <button type="submit" class="sim-btn">Unlock</button>
+      </form>
+    </div>
+  </div>
+  <script>
+    function submitUnlock(e) {
+      e.preventDefault();
+      const key = document.getElementById('unlockKey').value;
+      sessionStorage.setItem('apiKey', key);
+      window.location.href = '/?key=' + encodeURIComponent(key);
+    }
+  </script>
+</body>
+</html>`;
+}
+
 export function renderStatusPage(
   doors: DoorData[] = [],
   history: HistoryEntry[] = [],
   options: StatusPageOptions = {},
 ): string {
   const doorNames = options.doorNames ?? doors.map((door) => door.name);
-  const openDoorNames =
-    options.openDoorNames ??
-    doors.filter((door) => door.state.value === 'OPEN').map((door) => door.name);
-  const webhookConfigured = options.webhookConfigured ?? false;
-  const alertThresholdMinutes = options.alertThresholdMinutes ?? 60;
+  const alertConfig = options.alertConfig ?? null;
+  const apiKeyRequired = options.apiKeyRequired ?? false;
+  const webhookUrl = alertConfig?.webhookUrl ?? '';
+  const thresholdMinutes = alertConfig?.thresholdMinutes ?? 60;
+  const alertMethod = alertConfig?.method ?? 'POST';
   const nowMs = Date.now();
 
   const doorsHtml = doors
@@ -186,10 +275,9 @@ export function renderStatusPage(
           .join('\n');
 
   const simDoorOptions = buildDoorSelectOptions(doorNames);
-  const alertDoorOptions = buildDoorSelectOptions(doorNames, openDoorNames, true);
-  const webhookStatusText = webhookConfigured
-    ? 'WEBHOOK_URL is configured'
-    : 'WEBHOOK_URL is not configured';
+  const alertDoorOptions = buildDoorSelectOptions(doorNames);
+  const postSelected = alertMethod === 'POST' ? ' selected' : '';
+  const getSelected = alertMethod === 'GET' ? ' selected' : '';
 
   return `
 <!doctype html>
@@ -436,7 +524,7 @@ export function renderStatusPage(
     <div class="tabs">
       <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</div>
       <div class="tab" data-tab="simulator" onclick="switchTab('simulator')">Simulator</div>
-      <div class="tab" data-tab="alerts" onclick="switchTab('alerts')">Alert Test</div>
+      <div class="tab" data-tab="alerts" onclick="switchTab('alerts')">Alerts</div>
     </div>
 
     <div id="dashboard-view">
@@ -472,17 +560,13 @@ export function renderStatusPage(
                 ${simDoorOptions}
               </select>
             </div>
-            <div style="margin-bottom:12px;">
+            <div style="margin-bottom:16px;">
               <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Action</label>
               <select id="simAction" required class="sim-input">
                 <option value="opened">Opened</option>
                 <option value="closed">Closed</option>
                 <option value="stopped">Stopped</option>
               </select>
-            </div>
-            <div style="margin-bottom:16px;">
-              <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">API Key (If configured)</label>
-              <input type="password" id="simKey" placeholder="Your API_KEY" class="sim-input" />
             </div>
 
             <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
@@ -494,30 +578,39 @@ export function renderStatusPage(
     </div>
 
     <div id="alerts-view" style="display: none;">
-      <h1>Alert Test</h1>
+      <h1>Alerts</h1>
       <div class="subtitle">
-        Test the left-open webhook alert (same HTTP POST as the cron job every 15 minutes).
+        Lightweight left-open webhook for ntfy.sh, Pushover, Apprise, and similar services.
+        Use a secret topic URL — the cron job checks every 15 minutes.
       </div>
       <div class="card history-card">
-        <div class="alert-meta">
-          ${webhookStatusText}<br/>
-          Alert threshold: ${alertThresholdMinutes} minutes
+        <div style="margin-bottom:12px;">
+          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Webhook URL</label>
+          <input type="url" id="alertWebhookUrl" value="${escapeHtml(webhookUrl)}" placeholder="https://ntfy.sh/your-secret-topic" class="sim-input" />
         </div>
 
         <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">API Key (If configured)</label>
-          <input type="password" id="alertKey" placeholder="Your API_KEY" class="sim-input" />
+          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Threshold (minutes)</label>
+          <input type="number" id="alertThreshold" min="1" value="${thresholdMinutes}" class="sim-input" />
         </div>
 
         <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door (for force test)</label>
+          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">HTTP method</label>
+          <select id="alertMethod" class="sim-input">
+            <option value="POST"${postSelected}>POST (JSON body)</option>
+            <option value="GET"${getSelected}>GET (query params)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Door (for test payload)</label>
           <select id="alertDoor" class="sim-input">
             ${alertDoorOptions}
           </select>
         </div>
 
-        <button type="button" id="alertCheckBtn" class="sim-btn" onclick="submitAlertCheck(false)">Run alert check</button>
-        <button type="button" id="alertForceBtn" class="sim-btn sim-btn-secondary" onclick="submitAlertCheck(true)">Force test alert</button>
+        <button type="button" id="alertSaveBtn" class="sim-btn" onclick="saveAlertConfig()">Save</button>
+        <button type="button" id="alertTestBtn" class="sim-btn sim-btn-secondary" onclick="testAlertWebhook()">Test webhook</button>
 
         <div id="alertResult" style="margin-top:16px;font-size:14px;display:none;padding:12px;border-radius:8px;"></div>
       </div>
@@ -526,6 +619,42 @@ export function renderStatusPage(
   </div>
 
   <script>
+    const apiKeyRequired = ${apiKeyRequired ? 'true' : 'false'};
+
+    (function bootstrapApiKey() {
+      const params = new URLSearchParams(window.location.search);
+      const keyFromUrl = params.get('key');
+      if (keyFromUrl) {
+        sessionStorage.setItem('apiKey', keyFromUrl);
+        params.delete('key');
+        const query = params.toString();
+        const newUrl = window.location.pathname + (query ? '?' + query : '');
+        history.replaceState({}, '', newUrl);
+      }
+    })();
+
+    function getApiKey() {
+      return sessionStorage.getItem('apiKey') || '';
+    }
+
+    function authHeaders(extra) {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+      if (apiKeyRequired) {
+        const key = getApiKey();
+        if (key) headers['Authorization'] = 'Bearer ' + key;
+      }
+      return headers;
+    }
+
+    async function authFetch(path, options) {
+      const opts = options || {};
+      return fetch(path, {
+        method: opts.method || 'GET',
+        headers: authHeaders(opts.headers),
+        body: opts.body
+      });
+    }
+
     function switchTab(tabId) {
       const views = ['dashboard', 'simulator', 'alerts'];
       views.forEach(function(viewId) {
@@ -537,11 +666,28 @@ export function renderStatusPage(
       });
     }
 
-    function buildAuthUrl(path) {
-      const keyInput = document.getElementById(path === '/simulate-alert' ? 'alertKey' : 'simKey');
-      const key = keyInput ? keyInput.value : '';
-      if (!key) return path;
-      return path + '?key=' + encodeURIComponent(key);
+    function getAlertFormValues() {
+      return {
+        webhookUrl: document.getElementById('alertWebhookUrl').value.trim(),
+        thresholdMinutes: parseInt(document.getElementById('alertThreshold').value, 10),
+        method: document.getElementById('alertMethod').value,
+        doorName: document.getElementById('alertDoor').value
+      };
+    }
+
+    function showAlertResult(html, isError) {
+      const resDiv = document.getElementById('alertResult');
+      resDiv.style.display = 'block';
+      if (isError) {
+        resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
+        resDiv.style.color = '#ff4d4f';
+        resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
+      } else {
+        resDiv.style.background = 'rgba(15,23,42,0.5)';
+        resDiv.style.color = '#e5e7eb';
+        resDiv.style.border = '1px solid rgba(148,163,184,0.3)';
+      }
+      resDiv.innerHTML = html;
     }
 
     async function submitSimulation(e) {
@@ -559,9 +705,8 @@ export function renderStatusPage(
       };
 
       try {
-        const response = await fetch(buildAuthUrl('/simulate'), {
+        const response = await authFetch('/simulate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
@@ -578,7 +723,7 @@ export function renderStatusPage(
           resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
           resDiv.style.color = '#ff4d4f';
           resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-          resDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+          resDiv.textContent = 'Error: ' + (data.error || response.statusText || 'Unknown error');
         }
       } catch (err) {
         resDiv.style.display = 'block';
@@ -592,75 +737,86 @@ export function renderStatusPage(
       }
     }
 
-    function formatAlertResults(results) {
-      if (!Array.isArray(results) || results.length === 0) {
-        return '<div class="alert-skipped">No results returned.</div>';
+    function formatTestResult(result) {
+      if (result.sent) {
+        return '<div class="alert-success">Webhook sent (HTTP ' + result.webhookStatus + ')</div>';
       }
-
-      return results.map(function(result) {
-        const doorLabel = result.door ? result.door + ': ' : '';
-        if (result.sent) {
-          return '<div class="alert-result-item alert-success">' + doorLabel + 'Webhook sent (HTTP ' + result.webhookStatus + ')</div>';
-        }
-        if (result.error) {
-          return '<div class="alert-result-item alert-error">' + doorLabel + result.error + '</div>';
-        }
-        return '<div class="alert-result-item alert-skipped">' + doorLabel + (result.skippedReason || 'Skipped') + '</div>';
-      }).join('');
+      if (result.error) {
+        return '<div class="alert-error">' + result.error + '</div>';
+      }
+      return '<div class="alert-skipped">' + (result.skippedReason || 'Skipped') + '</div>';
     }
 
-    async function submitAlertCheck(force) {
-      const checkBtn = document.getElementById('alertCheckBtn');
-      const forceBtn = document.getElementById('alertForceBtn');
-      const resDiv = document.getElementById('alertResult');
+    async function saveAlertConfig() {
+      const btn = document.getElementById('alertSaveBtn');
+      const values = getAlertFormValues();
 
-      checkBtn.disabled = true;
-      forceBtn.disabled = true;
-      resDiv.style.display = 'none';
-
-      const payload = {};
-      if (force) {
-        const doorName = document.getElementById('alertDoor').value;
-        if (!doorName) {
-          resDiv.style.display = 'block';
-          resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
-          resDiv.style.color = '#ff4d4f';
-          resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-          resDiv.innerHTML = 'Select an open door for force test.';
-          checkBtn.disabled = false;
-          forceBtn.disabled = false;
-          return;
-        }
-        payload.forceDoorName = doorName;
+      if (!values.webhookUrl) {
+        showAlertResult('Webhook URL is required.', true);
+        return;
       }
 
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
       try {
-        const response = await fetch(buildAuthUrl('/simulate-alert'), {
+        const response = await authFetch('/alert-config', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            webhookUrl: values.webhookUrl,
+            thresholdMinutes: values.thresholdMinutes,
+            method: values.method
+          })
         });
 
         const data = await response.json();
-        resDiv.style.display = 'block';
-        resDiv.style.background = 'rgba(15,23,42,0.5)';
-        resDiv.style.color = '#e5e7eb';
-        resDiv.style.border = '1px solid rgba(148,163,184,0.3)';
-
         if (response.ok) {
-          resDiv.innerHTML = formatAlertResults(data.results);
+          showAlertResult('<div class="alert-success">Alert settings saved.</div>', false);
         } else {
-          resDiv.innerHTML = '<div class="alert-error">' + (data.error || 'Unknown error') + '</div>';
+          showAlertResult('<div class="alert-error">' + (data.error || 'Save failed') + '</div>', true);
         }
       } catch (err) {
-        resDiv.style.display = 'block';
-        resDiv.style.background = 'rgba(255, 77, 79, 0.15)';
-        resDiv.style.color = '#ff4d4f';
-        resDiv.style.border = '1px solid rgba(255, 77, 79, 0.3)';
-        resDiv.textContent = 'Network error: ' + err.message;
+        showAlertResult('Network error: ' + err.message, true);
       } finally {
-        checkBtn.disabled = false;
-        forceBtn.disabled = false;
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    }
+
+    async function testAlertWebhook() {
+      const btn = document.getElementById('alertTestBtn');
+      const values = getAlertFormValues();
+
+      if (!values.webhookUrl) {
+        showAlertResult('Webhook URL is required.', true);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+
+      try {
+        const response = await authFetch('/test-alert', {
+          method: 'POST',
+          body: JSON.stringify({
+            webhookUrl: values.webhookUrl,
+            thresholdMinutes: values.thresholdMinutes,
+            method: values.method,
+            doorName: values.doorName
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showAlertResult(formatTestResult(data.result), false);
+        } else {
+          showAlertResult('<div class="alert-error">' + (data.error || 'Test failed') + '</div>', true);
+        }
+      } catch (err) {
+        showAlertResult('Network error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test webhook';
       }
     }
   </script>

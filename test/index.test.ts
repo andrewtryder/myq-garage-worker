@@ -144,11 +144,23 @@ describe('myq-garage-worker integration tests', () => {
       API_KEY: 'super-secret',
     };
 
-    it('returns 200 HTML without auth when API_KEY is set', async () => {
+    it('returns unlock HTML without auth when API_KEY is set', async () => {
       const req = new Request('https://worker.dev/');
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('text/html');
+      const html = await response.text();
+      expect(html).toContain('Unlock');
+      expect(html).not.toContain('Garage Door Left');
+    });
+
+    it('returns dashboard HTML with auth when API_KEY is set', async () => {
+      const req = new Request('https://worker.dev/?key=super-secret');
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain('Garage Door Status');
+      expect(html).not.toContain('Unlock');
     });
 
     it('returns 401 for ?json=true without auth when API_KEY is set', async () => {
@@ -231,13 +243,13 @@ describe('myq-garage-worker integration tests', () => {
       expect(json).toEqual([{ id: 'garage-right', name: 'Garage Door Right', status: 'closed' }]);
     });
 
-    it('returns 401 for POST /simulate-alert without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/simulate-alert', { method: 'POST', body: '{}' });
+    it('returns 401 for POST /test-alert without auth when API_KEY is set', async () => {
+      const req = new Request('https://worker.dev/test-alert', { method: 'POST', body: '{}' });
       const response = await worker.fetch(req, mockEnvAuth, {} as any);
       expect(response.status).toBe(401);
     });
 
-    it('POST /simulate-alert with force mode sends webhook for open door', async () => {
+    it('POST /test-alert sends webhook with Bearer auth', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(() =>
@@ -248,36 +260,50 @@ describe('myq-garage-worker integration tests', () => {
         ),
       );
 
-      kvStore.set(
-        'garage-left',
-        JSON.stringify({ value: 'OPEN', createdAt: '2025-01-01T11:59:00.000Z' }),
-      );
-
-      const req = new Request('https://worker.dev/simulate-alert', {
+      const req = new Request('https://worker.dev/test-alert', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer super-secret',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ forceDoorName: 'Garage Door Left' }),
+        body: JSON.stringify({
+          webhookUrl: 'https://example.com/webhook',
+          thresholdMinutes: 60,
+          method: 'POST',
+          doorName: 'Garage Door Left',
+        }),
       });
 
-      const response = await worker.fetch(
-        req,
-        {
-          ...mockEnvAuth,
-          WEBHOOK_URL: 'https://example.com/webhook',
-          ALERT_OPEN_THRESHOLD_MINUTES: '60',
-        },
-        {} as any,
-      );
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const json = (await response.json()) as { result: { sent: boolean } };
 
-      const json = (await response.json()) as { results: Array<{ sent: boolean }> };
       expect(response.status).toBe(200);
-      expect(json.results[0].sent).toBe(true);
+      expect(json.result.sent).toBe(true);
       expect(fetch).toHaveBeenCalledTimes(1);
 
       vi.unstubAllGlobals();
+    });
+
+    it('POST /alert-config saves config to KV with Bearer auth', async () => {
+      const req = new Request('https://worker.dev/alert-config', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer super-secret',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          webhookUrl: 'https://example.com/webhook',
+          thresholdMinutes: 45,
+          method: 'GET',
+        }),
+      });
+
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const json = (await response.json()) as { success: boolean; config: { method: string } };
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.config.method).toBe('GET');
     });
   });
 });

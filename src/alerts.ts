@@ -1,3 +1,4 @@
+import { AlertConfig, getAlertConfig } from './alert-config';
 import { parseConfiguredDoors } from './doors';
 import { formatDuration } from './status-page';
 import { getDoorState } from './storage';
@@ -21,24 +22,70 @@ export interface AlertResult {
   error?: string;
 }
 
-export function getAlertThresholdMinutes(env: Env): number {
-  const thresholdStr = env.ALERT_OPEN_THRESHOLD_MINUTES || '60';
-  const thresholdMinutes = parseInt(thresholdStr, 10);
-  if (isNaN(thresholdMinutes) || thresholdMinutes <= 0) {
-    return 60;
+export async function sendWebhook(config: AlertConfig, payload: AlertPayload): Promise<Response> {
+  if (config.method === 'GET') {
+    const url = new URL(config.webhookUrl);
+    url.searchParams.set('title', payload.title);
+    url.searchParams.set('message', payload.message);
+    url.searchParams.set('door', payload.door);
+    url.searchParams.set('state', payload.state);
+    url.searchParams.set('durationText', payload.durationText);
+    url.searchParams.set('durationMs', String(payload.durationMs));
+    return fetch(url.toString(), { method: 'GET' });
   }
-  return thresholdMinutes;
+
+  return fetch(config.webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testAlert(
+  config: AlertConfig,
+  doorName?: string,
+): Promise<AlertResult> {
+  const payload: AlertPayload = {
+    title: 'Garage Door Alert',
+    message: doorName
+      ? `Test alert for ${doorName} from myq-garage-worker.`
+      : 'Test alert from myq-garage-worker.',
+    door: doorName || 'Test',
+    state: 'OPEN',
+    durationMs: 0,
+    durationText: 'Test',
+  };
+
+  try {
+    const response = await sendWebhook(config, payload);
+    return {
+      door: payload.door,
+      sent: response.ok,
+      payload,
+      webhookStatus: response.status,
+      skippedReason: response.ok ? undefined : `Webhook returned HTTP ${response.status}`,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      door: payload.door,
+      sent: false,
+      payload,
+      error: message,
+    };
+  }
 }
 
 export async function runOpenDoorAlerts(
   env: Env,
-  options?: { forceDoorName?: string; nowMs?: number },
+  options?: { config?: AlertConfig; forceDoorName?: string; nowMs?: number },
 ): Promise<AlertResult[]> {
-  if (!env.WEBHOOK_URL) {
-    return [{ door: '', sent: false, skippedReason: 'WEBHOOK_URL not configured' }];
+  const config = options?.config ?? (await getAlertConfig(env));
+  if (!config) {
+    return [{ door: '', sent: false, skippedReason: 'Alert webhook not configured' }];
   }
 
-  const thresholdMinutes = getAlertThresholdMinutes(env);
+  const thresholdMinutes = config.thresholdMinutes;
   const thresholdMs = thresholdMinutes * 60 * 1000;
   const nowMs = options?.nowMs ?? Date.now();
   const configuredDoors = parseConfiguredDoors(env);
@@ -100,11 +147,7 @@ export async function runOpenDoorAlerts(
     };
 
     try {
-      const response = await fetch(env.WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const response = await sendWebhook(config, payload);
 
       results.push({
         door: doorName,

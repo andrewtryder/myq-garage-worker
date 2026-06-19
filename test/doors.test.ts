@@ -40,11 +40,11 @@ describe('doors helpers', () => {
   describe('routeRequiresAuth', () => {
     const env = { API_KEY: 'secret' } as Env;
 
-    it('does not require auth for HTML dashboard', () => {
-      expect(routeRequiresAuth(new Request('https://worker.dev/'), env)).toBe(false);
+    it('requires auth for HTML dashboard at /', () => {
+      expect(routeRequiresAuth(new Request('https://worker.dev/'), env)).toBe(true);
     });
 
-    it('requires auth for /devices, ?json=true, POST /simulate, and POST /simulate-alert', () => {
+    it('requires auth for /devices, ?json=true, POST /simulate, /alert-config, and /test-alert', () => {
       expect(routeRequiresAuth(new Request('https://worker.dev/devices'), env)).toBe(true);
       expect(routeRequiresAuth(new Request('https://worker.dev/?json=true'), env)).toBe(true);
       expect(
@@ -55,7 +55,13 @@ describe('doors helpers', () => {
       ).toBe(true);
       expect(
         routeRequiresAuth(
-          new Request('https://worker.dev/simulate-alert', { method: 'POST', body: '{}' }),
+          new Request('https://worker.dev/alert-config', { method: 'POST', body: '{}' }),
+          env,
+        ),
+      ).toBe(true);
+      expect(
+        routeRequiresAuth(
+          new Request('https://worker.dev/test-alert', { method: 'POST', body: '{}' }),
           env,
         ),
       ).toBe(true);

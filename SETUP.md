@@ -71,13 +71,19 @@ Finally, you need to forward the notifications from your personal email to the C
    - Check **Forward it to:** and select your Cloudflare email address.
 6. Click **Create filter**.
 
-You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your public status dashboard!
+You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your status dashboard!
 
-## 5. Protect API routes with an API Key
+## 5. Protect routes with an API Key
 
-To protect machine-facing routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /simulate-alert`) while keeping the HTML dashboard at `/` public, create a secret `API_KEY`.
+Set an `API_KEY` secret to protect the dashboard and API routes:
 
 - _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
 - _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.
 
-The status dashboard remains bookmarkable at `https://your-worker.workers.dev/` with no key. Home Assistant and other API clients should send `Authorization: Bearer YOUR_API_KEY` (or use `?key=` / `x-api-key` on protected routes).
+When `API_KEY` is set:
+
+- **`GET /`** shows an unlock page until you enter your key (or visit with `?key=YOUR_KEY`).
+- **`GET /devices`** requires auth — Home Assistant sends `Authorization: Bearer YOUR_API_KEY`.
+- **`POST /simulate`**, **`POST /alert-config`**, and **`POST /test-alert`** require auth for the Simulator and Alerts tabs.
+
+Configure left-open webhook alerts on the dashboard **Alerts** tab (settings are saved to KV, not environment variables).

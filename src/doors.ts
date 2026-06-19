@@ -119,8 +119,10 @@ export function routeRequiresAuth(request: Request, env: Env): boolean {
 
   const url = new URL(request.url);
 
+  if (request.method === 'GET' && url.pathname === '/') return true;
   if (request.method === 'POST' && url.pathname === '/simulate') return true;
-  if (request.method === 'POST' && url.pathname === '/simulate-alert') return true;
+  if (request.method === 'POST' && url.pathname === '/alert-config') return true;
+  if (request.method === 'POST' && url.pathname === '/test-alert') return true;
   if (request.method === 'GET' && url.pathname === '/devices') return true;
   if (request.method === 'GET' && url.searchParams.get('json') === 'true') return true;
 

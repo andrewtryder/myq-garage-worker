@@ -44,7 +44,8 @@ describe('status-page utils', () => {
       expect(html).toContain('id="dashboard-view"');
       expect(html).toContain('id="simulator-view"');
       expect(html).toContain('id="alerts-view"');
-      expect(html).toContain('Alert Test');
+      expect(html).toContain('Alerts');
+      expect(html).toContain('alertWebhookUrl');
     });
 
     it('renders doors successfully', () => {

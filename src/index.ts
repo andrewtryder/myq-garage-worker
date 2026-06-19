@@ -1,8 +1,9 @@
 import { Env } from './types';
 import { saveDoorState } from './storage';
 import { mapActionToStatus, parseMyQSubject, resolveDoorKey } from './email-parser';
-import { renderStatusPage } from './status-page';
-import { getAlertThresholdMinutes, runOpenDoorAlerts } from './alerts';
+import { renderStatusPage, renderUnlockPage } from './status-page';
+import { runOpenDoorAlerts, testAlert } from './alerts';
+import { getAlertConfig, resolveAlertConfigFromBody, saveAlertConfig } from './alert-config';
 import { buildHaDevices, loadAllDoors, routeRequiresAuth } from './doors';
 
 export type { Env };
@@ -25,6 +26,22 @@ function isAuthorized(request: Request, env: Env): boolean {
   }
 
   return false;
+}
+
+function unauthorizedResponse(request: Request, _env: Env): Response {
+  const url = new URL(request.url);
+  if (
+    request.method === 'GET' &&
+    url.pathname === '/' &&
+    url.searchParams.get('json') !== 'true'
+  ) {
+    return new Response(renderUnlockPage(), {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  }
+
+  return new Response('Unauthorized', { status: 401 });
 }
 
 export default {
@@ -60,8 +77,9 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    if (!env.WEBHOOK_URL) {
-      console.log('No WEBHOOK_URL configured, skipping scheduled alert check.');
+    const config = await getAlertConfig(env);
+    if (!config) {
+      console.log('No alert webhook configured, skipping scheduled alert check.');
       return;
     }
 
@@ -74,7 +92,7 @@ export default {
 
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     if (routeRequiresAuth(request, env) && !isAuthorized(request, env)) {
-      return new Response('Unauthorized', { status: 401 });
+      return unauthorizedResponse(request, env);
     }
 
     try {
@@ -129,14 +147,43 @@ export default {
         }
       }
 
-      if (request.method === 'POST' && url.pathname === '/simulate-alert') {
+      if (request.method === 'POST' && url.pathname === '/alert-config') {
         try {
-          const body = (await request.json()) as { forceDoorName?: string };
-          const results = await runOpenDoorAlerts(env, {
-            forceDoorName: body.forceDoorName,
+          const body = (await request.json()) as Record<string, unknown>;
+          const config = await saveAlertConfig(env, body);
+          return new Response(JSON.stringify({ success: true, config }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
           });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Invalid alert configuration';
+          return new Response(JSON.stringify({ error: message }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
 
-          return new Response(JSON.stringify({ results }), {
+      if (request.method === 'POST' && url.pathname === '/test-alert') {
+        try {
+          const body = (await request.json()) as Record<string, unknown>;
+          const saved = await getAlertConfig(env);
+          const config = resolveAlertConfigFromBody(body, saved);
+
+          if (!config) {
+            return new Response(JSON.stringify({ error: 'Webhook URL is required' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          const doorName =
+            typeof body.doorName === 'string' && body.doorName.trim()
+              ? body.doorName.trim()
+              : undefined;
+          const result = await testAlert(config, doorName);
+
+          return new Response(JSON.stringify({ result }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });
@@ -171,11 +218,13 @@ export default {
         .filter((door) => door.state.value === 'OPEN')
         .map((door) => door.name);
 
+      const alertConfig = await getAlertConfig(env);
+
       const html = renderStatusPage(doors, combinedHistory, {
         doorNames: allDoorData.map((door) => door.name),
         openDoorNames,
-        webhookConfigured: !!env.WEBHOOK_URL,
-        alertThresholdMinutes: getAlertThresholdMinutes(env),
+        alertConfig,
+        apiKeyRequired: !!env.API_KEY,
       });
 
       return new Response(html, {
