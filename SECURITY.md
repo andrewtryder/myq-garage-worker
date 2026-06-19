@@ -16,7 +16,7 @@ We will acknowledge receipt within a reasonable timeframe and work on a fix befo
 
 This worker exposes a public HTTP endpoint by default. For personal deployments:
 
-1. **Set `API_KEY`** — Protects `GET /devices`, `GET /?json=true`, and `POST /simulate`. The HTML dashboard at `/` stays public. Pass the key via `Authorization: Bearer`, `?key=`, or `x-api-key` on protected routes.
+1. **Set `API_KEY`** — Protects `GET /devices`, `GET /?json=true`, `POST /simulate`, and `POST /simulate-alert`. The HTML dashboard at `/` stays public. Pass the key via `Authorization: Bearer`, `?key=`, or `x-api-key` on protected routes.
 2. **Use Cloudflare Zero Trust / Access** — Restrict the worker URL to authorized identities.
 3. **Rotate secrets** — If `API_KEY` or your Cloudflare API token is exposed, rotate them immediately in the Cloudflare dashboard and GitHub repository secrets.
 4. **Limit API token scope** — Use a Cloudflare API token scoped only to the Workers and KV resources this project needs.

@@ -230,5 +230,54 @@ describe('myq-garage-worker integration tests', () => {
 
       expect(json).toEqual([{ id: 'garage-right', name: 'Garage Door Right', status: 'closed' }]);
     });
+
+    it('returns 401 for POST /simulate-alert without auth when API_KEY is set', async () => {
+      const req = new Request('https://worker.dev/simulate-alert', { method: 'POST', body: '{}' });
+      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      expect(response.status).toBe(401);
+    });
+
+    it('POST /simulate-alert with force mode sends webhook for open door', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+          }),
+        ),
+      );
+
+      kvStore.set(
+        'garage-left',
+        JSON.stringify({ value: 'OPEN', createdAt: '2025-01-01T11:59:00.000Z' }),
+      );
+
+      const req = new Request('https://worker.dev/simulate-alert', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer super-secret',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ forceDoorName: 'Garage Door Left' }),
+      });
+
+      const response = await worker.fetch(
+        req,
+        {
+          ...mockEnvAuth,
+          WEBHOOK_URL: 'https://example.com/webhook',
+          ALERT_OPEN_THRESHOLD_MINUTES: '60',
+        },
+        {} as any,
+      );
+
+      const json = (await response.json()) as { results: Array<{ sent: boolean }> };
+      expect(response.status).toBe(200);
+      expect(json.results[0].sent).toBe(true);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      vi.unstubAllGlobals();
+    });
   });
 });

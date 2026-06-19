@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { statusColor, statusLabel, renderStatusPage, formatDuration } from '../src/status-page';
+import { statusColor, statusLabel, renderStatusPage, formatDuration, formatRelativeTime } from '../src/status-page';
 
 describe('status-page utils', () => {
   it('statusColor returns correct hex codes', () => {
@@ -28,6 +28,14 @@ describe('status-page utils', () => {
     expect(formatDuration(90000000)).toBe('1 day 1 hr');
   });
 
+  it('formatRelativeTime calculates compact relative labels', () => {
+    const now = Date.parse('2025-01-01T12:00:00.000Z');
+    expect(formatRelativeTime('2025-01-01T11:59:30.000Z', now)).toBe('(just now)');
+    expect(formatRelativeTime('2025-01-01T11:55:00.000Z', now)).toBe('(5m ago)');
+    expect(formatRelativeTime('2025-01-01T10:00:00.000Z', now)).toBe('(2h ago)');
+    expect(formatRelativeTime('2024-12-31T10:00:00.000Z', now)).toBe('(1d 2h ago)');
+  });
+
   describe('renderStatusPage HTML output', () => {
     it('renders empty states safely', () => {
       const html = renderStatusPage([], []);
@@ -35,6 +43,8 @@ describe('status-page utils', () => {
       expect(html).toContain('No recent activity recorded.');
       expect(html).toContain('id="dashboard-view"');
       expect(html).toContain('id="simulator-view"');
+      expect(html).toContain('id="alerts-view"');
+      expect(html).toContain('Alert Test');
     });
 
     it('renders doors successfully', () => {
@@ -66,6 +76,16 @@ describe('status-page utils', () => {
       expect(html).toContain('timeline-action action-closed');
       expect(html).toContain('CLOSED');
       expect(html).toContain('2025-01-01T12:30:00Z');
+      expect(html).toContain('timeline-relative');
+    });
+
+    it('renders configured door names in simulator select', () => {
+      const html = renderStatusPage([], [], {
+        doorNames: ['Garage Door Left', 'Garage Door Right'],
+      });
+      expect(html).toContain('<select id="simDoor"');
+      expect(html).toContain('Garage Door Left');
+      expect(html).not.toContain('simSubject');
     });
   });
 });
