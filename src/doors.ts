@@ -73,14 +73,15 @@ export async function loadAllDoors(env: Env): Promise<{
     };
   });
 
-  let combinedHistory: HistoryEntry[] = [];
-  allDoorData.forEach((d) => {
-    const doorHistory: HistoryEntry[] = d.history.map((item) => ({
-      ...item,
-      doorName: d.name,
-    }));
-    combinedHistory = combinedHistory.concat(doorHistory);
-  });
+  const combinedHistory: HistoryEntry[] = [];
+  for (const d of allDoorData) {
+    for (const item of d.history) {
+      combinedHistory.push({
+        ...item,
+        doorName: d.name,
+      });
+    }
+  }
 
   combinedHistory.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
