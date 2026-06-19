@@ -19,33 +19,51 @@ export function parseMyQSubject(subject: string): MyQParsedSubject | null {
   };
 }
 
+// Global cache for resolving garage doors to avoid repetitive JSON parsing and string lowercasing
+let cachedDoorsRawEnvValue: string | Record<string, string> | undefined;
+let cachedLowercasedDoors: Record<string, string> | null = null;
+
+// Reset function used primarily for tests to ensure test isolation
+export function resetDoorKeyCache(): void {
+  cachedDoorsRawEnvValue = undefined;
+  cachedLowercasedDoors = null;
+}
+
 export function resolveDoorKey(deviceName: string, env: Env): string | null {
-  let configuredDoors: Record<string, string> = {};
+  // Check if our cache is still valid
+  if (cachedDoorsRawEnvValue !== env.GARAGE_DOORS || cachedLowercasedDoors === null) {
+    let configuredDoors: Record<string, string> = {};
 
-  if (typeof env.GARAGE_DOORS === 'string') {
-    try {
-      configuredDoors = JSON.parse(env.GARAGE_DOORS);
-    } catch {
-      console.error('Failed to parse GARAGE_DOORS JSON string');
-      return null;
+    if (typeof env.GARAGE_DOORS === 'string') {
+      try {
+        configuredDoors = JSON.parse(env.GARAGE_DOORS);
+      } catch {
+        console.error('Failed to parse GARAGE_DOORS JSON string');
+        // Cache the failure so we don't keep trying to parse invalid JSON on every call
+        cachedDoorsRawEnvValue = env.GARAGE_DOORS;
+        cachedLowercasedDoors = {};
+        return null;
+      }
+    } else if (
+      typeof env.GARAGE_DOORS === 'object' &&
+      env.GARAGE_DOORS !== null &&
+      !Array.isArray(env.GARAGE_DOORS)
+    ) {
+      configuredDoors = env.GARAGE_DOORS;
     }
-  } else if (
-    typeof env.GARAGE_DOORS === 'object' &&
-    env.GARAGE_DOORS !== null &&
-    !Array.isArray(env.GARAGE_DOORS)
-  ) {
-    configuredDoors = env.GARAGE_DOORS;
+
+    // Build the lowercased map
+    const lowercasedMap: Record<string, string> = {};
+    for (const [name, key] of Object.entries(configuredDoors)) {
+      lowercasedMap[name.toLowerCase()] = key;
+    }
+
+    cachedLowercasedDoors = lowercasedMap;
+    cachedDoorsRawEnvValue = env.GARAGE_DOORS;
   }
 
-  // Exact match (case insensitive) on keys
   const targetNameLower = deviceName.toLowerCase();
-  for (const [name, key] of Object.entries(configuredDoors)) {
-    if (name.toLowerCase() === targetNameLower) {
-      return key;
-    }
-  }
-
-  return null;
+  return cachedLowercasedDoors[targetNameLower] || null;
 }
 
 export function mapActionToStatus(action: string): DoorStatus {

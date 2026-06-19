@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { statusColor, statusLabel, renderStatusPage, formatDuration, formatRelativeTime } from '../src/status-page';
+import {
+  statusColor,
+  statusLabel,
+  renderStatusPage,
+  formatDuration,
+  formatRelativeTime,
+} from '../src/status-page';
 
 describe('status-page utils', () => {
   it('statusColor returns correct hex codes', () => {

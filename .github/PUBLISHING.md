@@ -14,12 +14,12 @@ Use this checklist when preparing or publishing the repository on GitHub.
 
 In **Settings → Secrets and variables → Actions**:
 
-| Name                    | Type     | Purpose                           |
-| ----------------------- | -------- | --------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI              |
-| `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys |
-| `API_KEY`               | Secret   | Optional dashboard/API protection |
-| `GARAGE_DOORS`          | Secret   | JSON door name → KV key mapping   |
+| Name                    | Type     | Purpose                                   |
+| ----------------------- | -------- | ----------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI                      |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys         |
+| `API_KEY`               | Secret   | Optional dashboard/API protection         |
+| `GARAGE_DOORS`          | Secret   | JSON door name → KV key mapping           |
 | `KV_NAMESPACE_ID`       | Variable | KV namespace ID (injected at deploy time) |
 
 ## Release

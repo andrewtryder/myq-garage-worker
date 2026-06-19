@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect } from 'vitest';
-import { parseMyQSubject, resolveDoorKey, mapActionToStatus } from '../src/email-parser';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  parseMyQSubject,
+  resolveDoorKey,
+  mapActionToStatus,
+  resetDoorKeyCache,
+} from '../src/email-parser';
 import { Env } from '../src/types';
 
 describe('email-parser unit tests', () => {
@@ -59,6 +64,9 @@ describe('email-parser unit tests', () => {
   });
 
   describe('resolveDoorKey', () => {
+    beforeEach(() => {
+      resetDoorKeyCache();
+    });
     it('resolves configured door object to mapped key', () => {
       const key = resolveDoorKey('Garage Door Right', mockEnv);
       expect(key).toBe('garage-right');

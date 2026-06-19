@@ -2,44 +2,39 @@
 
 ## [1.0.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.10...myq-garage-worker-v1.0.0) (2026-06-19)
 
-
 ### ⚠ BREAKING CHANGES
 
-* Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22))
-* WEBHOOK_URL and ALERT_OPEN_THRESHOLD_MINUTES env vars are removed; configure alerts in the dashboard Alerts tab (stored in KV). POST /simulate-alert is removed; use POST /alert-config and POST /test-alert. When API_KEY is set, GET / requires authentication (unlock page).
+- Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22))
+- WEBHOOK_URL and ALERT_OPEN_THRESHOLD_MINUTES env vars are removed; configure alerts in the dashboard Alerts tab (stored in KV). POST /simulate-alert is removed; use POST /alert-config and POST /test-alert. When API_KEY is set, GET / requires authentication (unlock page).
 
 ### Features
 
-* Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22)) ([79f683f](https://github.com/andrewtryder/myq-garage-worker/commit/79f683fdacefbc4d9e6fdce67aba739516a1afff))
-* improve dashboard UI and add Alert Test tab ([08aea79](https://github.com/andrewtryder/myq-garage-worker/commit/08aea7955871a894b8752980a075ba6c17d83435))
-* improve dashboard UI and add Alert Test tab ([6993795](https://github.com/andrewtryder/myq-garage-worker/commit/6993795212db5fe2b4d5ec693829099d974ca5e0))
-* redesign Alerts tab with KV config and unified API_KEY auth ([2c547e1](https://github.com/andrewtryder/myq-garage-worker/commit/2c547e1bb4ee904cf2c6a1584e262eeb1560f143))
+- Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22)) ([79f683f](https://github.com/andrewtryder/myq-garage-worker/commit/79f683fdacefbc4d9e6fdce67aba739516a1afff))
+- improve dashboard UI and add Alert Test tab ([08aea79](https://github.com/andrewtryder/myq-garage-worker/commit/08aea7955871a894b8752980a075ba6c17d83435))
+- improve dashboard UI and add Alert Test tab ([6993795](https://github.com/andrewtryder/myq-garage-worker/commit/6993795212db5fe2b4d5ec693829099d974ca5e0))
+- redesign Alerts tab with KV config and unified API_KEY auth ([2c547e1](https://github.com/andrewtryder/myq-garage-worker/commit/2c547e1bb4ee904cf2c6a1584e262eeb1560f143))
 
 ## [0.1.10](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.9...myq-garage-worker-v0.1.10) (2026-06-18)
 
-
 ### Bug Fixes
 
-* **deploy:** inject GARAGE_DOORS via wrangler.jsonc to avoid shell mangling ([f5ff326](https://github.com/andrewtryder/myq-garage-worker/commit/f5ff3261f03c75bbcf43fbf860fbb46dfa6002c3))
+- **deploy:** inject GARAGE_DOORS via wrangler.jsonc to avoid shell mangling ([f5ff326](https://github.com/andrewtryder/myq-garage-worker/commit/f5ff3261f03c75bbcf43fbf860fbb46dfa6002c3))
 
 ## [0.1.9](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.8...myq-garage-worker-v0.1.9) (2026-06-18)
 
-
 ### Features
 
-* add GET /devices endpoint for Home Assistant integration ([54f7004](https://github.com/andrewtryder/myq-garage-worker/commit/54f7004ba80159fc8c9c020ea2636cd2c95d0228))
+- add GET /devices endpoint for Home Assistant integration ([54f7004](https://github.com/andrewtryder/myq-garage-worker/commit/54f7004ba80159fc8c9c020ea2636cd2c95d0228))
 
 ## [0.1.8](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.7...myq-garage-worker-v0.1.8) (2026-06-18)
 
-
 ### Features
 
-* improve setup wizard and status page refinements ([5228657](https://github.com/andrewtryder/myq-garage-worker/commit/5228657fecf4a040e40c596d1c294504e389975c))
-
+- improve setup wizard and status page refinements ([5228657](https://github.com/andrewtryder/myq-garage-worker/commit/5228657fecf4a040e40c596d1c294504e389975c))
 
 ### Bug Fixes
 
-* **ci:** read GARAGE_DOORS from repository secret ([11d4c76](https://github.com/andrewtryder/myq-garage-worker/commit/11d4c767b70c50a865d462f5815bac4d8cd33185))
+- **ci:** read GARAGE_DOORS from repository secret ([11d4c76](https://github.com/andrewtryder/myq-garage-worker/commit/11d4c767b70c50a865d462f5815bac4d8cd33185))
 
 ## [0.1.7](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.6...myq-garage-worker-v0.1.7) (2026-06-18)
 

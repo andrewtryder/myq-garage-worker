@@ -82,9 +82,7 @@ export async function loadAllDoors(env: Env): Promise<{
     combinedHistory = combinedHistory.concat(doorHistory);
   });
 
-  combinedHistory.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  combinedHistory.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return {
     allDoorData,
