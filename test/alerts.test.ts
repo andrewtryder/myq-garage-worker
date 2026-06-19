@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getAlertThresholdMinutes, runOpenDoorAlerts } from '../src/alerts';
+import { runOpenDoorAlerts, sendWebhook, testAlert } from '../src/alerts';
+import { AlertConfig } from '../src/alert-config';
+
+const sampleConfig: AlertConfig = {
+  webhookUrl: 'https://example.com/webhook',
+  thresholdMinutes: 60,
+  method: 'POST',
+};
 
 describe('alerts', () => {
   beforeEach(() => {
@@ -19,10 +26,14 @@ describe('alerts', () => {
     vi.unstubAllGlobals();
   });
 
-  it('returns not configured when WEBHOOK_URL is missing', async () => {
-    const results = await runOpenDoorAlerts({} as any);
+  it('returns not configured when alert config is missing', async () => {
+    const mockKV = {
+      get: vi.fn(() => Promise.resolve(null)),
+    };
+
+    const results = await runOpenDoorAlerts({ GARAGE_STATE: mockKV } as any);
     expect(results).toEqual([
-      { door: '', sent: false, skippedReason: 'WEBHOOK_URL not configured' },
+      { door: '', sent: false, skippedReason: 'Alert webhook not configured' },
     ]);
   });
 
@@ -44,11 +55,12 @@ describe('alerts', () => {
     const env: any = {
       GARAGE_STATE: mockKV,
       GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-      WEBHOOK_URL: 'https://example.com/webhook',
-      ALERT_OPEN_THRESHOLD_MINUTES: '60',
     };
 
-    const results = await runOpenDoorAlerts(env, { nowMs: Date.parse('2025-01-01T12:00:00.000Z') });
+    const results = await runOpenDoorAlerts(env, {
+      config: sampleConfig,
+      nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
+    });
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(results[0].sent).toBe(true);
@@ -70,46 +82,41 @@ describe('alerts', () => {
     const env: any = {
       GARAGE_STATE: mockKV,
       GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-      WEBHOOK_URL: 'https://example.com/webhook',
-      ALERT_OPEN_THRESHOLD_MINUTES: '60',
     };
 
-    const results = await runOpenDoorAlerts(env, { nowMs: Date.parse('2025-01-01T12:00:00.000Z') });
+    const results = await runOpenDoorAlerts(env, {
+      config: sampleConfig,
+      nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
+    });
 
     expect(fetch).not.toHaveBeenCalled();
     expect(results[0].sent).toBe(false);
     expect(results[0].skippedReason).toContain('threshold 60 min');
   });
 
-  it('force mode sends alert even when under threshold', async () => {
-    const mockKV = {
-      get: vi.fn(() =>
-        Promise.resolve(
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2025-01-01T11:59:00.000Z',
-          }),
-        ),
-      ),
-    };
+  it('sends GET webhook with query params', async () => {
+    await sendWebhook(
+      { webhookUrl: 'https://ntfy.sh/topic', thresholdMinutes: 60, method: 'GET' },
+      {
+        title: 'Garage Door Alert',
+        message: 'Door open',
+        door: 'Garage Door Left',
+        state: 'OPEN',
+        durationMs: 1000,
+        durationText: '1 min',
+      },
+    );
 
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-      WEBHOOK_URL: 'https://example.com/webhook',
-      ALERT_OPEN_THRESHOLD_MINUTES: '60',
-    };
-
-    const results = await runOpenDoorAlerts(env, {
-      forceDoorName: 'Garage Door Left',
-      nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
-    });
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(results[0].sent).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('https://ntfy.sh/topic?'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
-  it('defaults alert threshold to 60 minutes', () => {
-    expect(getAlertThresholdMinutes({} as any)).toBe(60);
+  it('testAlert sends immediately without requiring an open door', async () => {
+    const result = await testAlert(sampleConfig, 'Garage Door Left');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.sent).toBe(true);
+    expect(result.payload?.door).toBe('Garage Door Left');
   });
 });

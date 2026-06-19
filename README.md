@@ -27,7 +27,7 @@ This worker acts as two endpoints:
 
 ## Security Recommendation
 
-If you are using this worker for personal use, set `API_KEY` to protect machine-facing API routes while keeping the HTML dashboard at `/` bookmark-friendly (no key required in the browser). For stronger access control on the dashboard itself, put the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/), restricting access to only your authorized emails or identity providers.
+If you are using this worker for personal use, set `API_KEY` to protect the dashboard and API routes. The browser unlock page accepts your key once per session (or use a bookmark like `https://your-worker.workers.dev/?key=YOUR_KEY`). Home Assistant and other API clients should send `Authorization: Bearer YOUR_API_KEY`. For stronger access control, put the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/).
 
 ## Environment Variables / Configuration
 
@@ -36,7 +36,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 | Variable Name  | Description                                                                                                                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                 |
-| `API_KEY`      | _(Optional)_ Secret key protecting API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /simulate-alert`). The HTML status dashboard at `/` stays public so you can bookmark it in a browser. Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
+| `API_KEY`      | _(Optional)_ Secret key protecting the dashboard (`GET /`), API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /alert-config`, `POST /test-alert`). Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
 
 **Example configuration:**
 
@@ -86,17 +86,19 @@ To ensure your dashboard UI updates correctly without having to open/close your 
 
 ### Option 1: Web UI Simulator
 
-Open your deployed worker URL in a browser. At the top of the screen, switch to the **Simulator** tab.
-Choose a configured door from the dropdown, pick an action (opened, closed, stopped), and enter your API key if configured.
+Open your deployed worker URL in a browser. When `API_KEY` is set, enter your key on the unlock page (or bookmark `/?key=YOUR_KEY`). Switch to the **Simulator** tab, choose a configured door from the dropdown, and pick an action (opened, closed, stopped).
 
-### Option 2: Alert Test tab
+### Option 2: Alerts tab
 
-Switch to the **Alert Test** tab to exercise the left-open webhook alert (same JSON `POST` the cron job sends every 15 minutes when a door exceeds `ALERT_OPEN_THRESHOLD_MINUTES`):
+Switch to the **Alerts** tab to configure a left-open webhook (stored in KV, used by the cron job every 15 minutes):
 
-- **Run alert check** — same logic as the scheduled cron (only sends if a door has been open past the threshold)
-- **Force test alert** — sends the webhook for a selected open door immediately, regardless of threshold (useful for testing Apprise, ntfy, etc.)
+- **Webhook URL** — your ntfy, Pushover, Apprise, or other endpoint (use a secret topic URL)
+- **Threshold (minutes)** — how long a door must be open before alerting
+- **HTTP method** — `POST` sends a JSON body; `GET` appends `title`, `message`, and other fields as query params (handy for ntfy.sh)
+- **Save** — persists settings for the scheduled cron job
+- **Test webhook** — sends a test notification immediately using the form values
 
-Both buttons call `POST /simulate-alert` (requires `API_KEY` when set). The tab shows whether `WEBHOOK_URL` is configured and the current threshold.
+Both **Save** and **Test webhook** call protected endpoints (`POST /alert-config`, `POST /test-alert`) and use the same session auth as the Simulator tab when `API_KEY` is set.
 
 ### Option 3: CLI Script
 
@@ -107,7 +109,7 @@ You can use the included CLI script from your terminal to ping the live (or loca
 node scripts/test-live.js https://my-worker.workers.dev "Garage Door Left" opened
 ```
 
-Both simulator options talk to dedicated endpoints (`POST /simulate` for door state, `POST /simulate-alert` for webhooks) which bypass the strict email "From:" address validations but execute the same parsing and storage/alert logic as production.
+Both simulator options talk to dedicated endpoints (`POST /simulate` for door state, `POST /alert-config` / `POST /test-alert` for webhooks) which bypass the strict email "From:" address validations but execute the same parsing and storage/alert logic as production.
 
 ## Formatting & Linting
 
@@ -140,14 +142,14 @@ This worker can automatically notify external services when a garage door is lef
 
 ### Webhook Alerts (Left Open)
 
-You can configure the worker to automatically check for doors left open for too long using Cloudflare Cron Triggers.
+The worker checks every 15 minutes (via Cloudflare Cron Triggers) for doors left open too long and sends a webhook notification.
 
-1. Configure the `WEBHOOK_URL` and `ALERT_OPEN_THRESHOLD_MINUTES` environment variables.
-   - `ALERT_OPEN_THRESHOLD_MINUTES`: How many minutes the door must be open before sending an alert (defaults to 60).
-   - `WEBHOOK_URL`: The destination URL to send the JSON alert payload to.
-2. Ensure you have the `[triggers]` configuration uncommented in `wrangler.jsonc` to fire the cron job.
+1. Open the dashboard **Alerts** tab and configure your webhook URL, threshold, and HTTP method, then click **Save**.
+2. Ensure you have the `[triggers]` configuration in `wrangler.jsonc` to fire the cron job.
 
-When triggered, the worker sends a standard `POST` request to the `WEBHOOK_URL` containing a JSON body:
+Alert settings are stored in KV (not environment variables). When `API_KEY` is set, saving and testing alerts requires the same authentication as the rest of the dashboard.
+
+**POST** sends a JSON body:
 
 ```json
 {
@@ -160,22 +162,21 @@ When triggered, the worker sends a standard `POST` request to the `WEBHOOK_URL` 
 }
 ```
 
+**GET** appends the same fields as query parameters on your webhook URL (useful for [ntfy.sh](https://ntfy.sh/) topics).
+
 #### Apprise Integration
 
-If you host an [Apprise API](https://github.com/caronc/apprise-api) container, you can fan-out notifications to Discord, Slack, SMS, Pushbullet, etc.
-Set your `WEBHOOK_URL` to your Apprise topic endpoint, for example:
-`WEBHOOK_URL = "https://apprise.mydomain.com/notify/garage"`
+If you host an [Apprise API](https://github.com/caronc/apprise-api) container, you can fan-out notifications to Discord, Slack, SMS, Pushbullet, etc. Set your webhook URL to your Apprise topic endpoint, for example `https://apprise.mydomain.com/notify/garage`, and choose **POST**.
 
 #### ntfy.sh Integration
 
-[ntfy.sh](https://ntfy.sh/) is a simple HTTP-based pub-sub notification service. Since `ntfy.sh` supports receiving raw JSON via POST to standard topics, you can set your `WEBHOOK_URL` directly to your secret ntfy topic endpoint (though parsing might require a middleman or using ntfy's raw JSON publish features).
-Alternatively, you can route the JSON payload through a service like `n8n` to translate the JSON into a clean Push notification.
+[ntfy.sh](https://ntfy.sh/) works well with **GET** (query params) or **POST** (JSON). Use a secret topic name in your URL — anyone with that URL can publish to your topic, independent of this worker.
 
 #### Home Assistant Integration
 
 For Home Assistant, use the companion **[ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage)** custom integration (available via HACS). It polls `GET /devices` on this worker and creates cover entities with config-flow setup.
 
-**Browser dashboard:** open `https://your-worker.workers.dev/` — no API key required, even when `API_KEY` is set.
+**Browser dashboard:** when `API_KEY` is set, open `https://your-worker.workers.dev/` and enter your key on the unlock page, or bookmark `https://your-worker.workers.dev/?key=YOUR_KEY`.
 
 **Home Assistant setup:**
 

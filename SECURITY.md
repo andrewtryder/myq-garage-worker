@@ -16,9 +16,10 @@ We will acknowledge receipt within a reasonable timeframe and work on a fix befo
 
 This worker exposes a public HTTP endpoint by default. For personal deployments:
 
-1. **Set `API_KEY`** — Protects `GET /devices`, `GET /?json=true`, `POST /simulate`, and `POST /simulate-alert`. The HTML dashboard at `/` stays public. Pass the key via `Authorization: Bearer`, `?key=`, or `x-api-key` on protected routes.
-2. **Use Cloudflare Zero Trust / Access** — Restrict the worker URL to authorized identities.
-3. **Rotate secrets** — If `API_KEY` or your Cloudflare API token is exposed, rotate them immediately in the Cloudflare dashboard and GitHub repository secrets.
-4. **Limit API token scope** — Use a Cloudflare API token scoped only to the Workers and KV resources this project needs.
+1. **Set `API_KEY`** — When set, protects the dashboard (`GET /`), `GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /alert-config`, and `POST /test-alert`. Unauthenticated visitors to `/` see an unlock page with no door data. Pass the key via `Authorization: Bearer` (Home Assistant), `?key=` (browser bookmark bootstrap), or `x-api-key`.
+2. **Protect your webhook URL** — Alert settings are stored in KV. Use a secret ntfy topic name or private Apprise endpoint; anyone who knows that URL can send notifications to it directly, regardless of this worker.
+3. **Use Cloudflare Zero Trust / Access** — Optional extra layer to restrict the worker URL to authorized identities.
+4. **Rotate secrets** — If `API_KEY` or your Cloudflare API token is exposed, rotate them immediately in the Cloudflare dashboard and GitHub repository secrets.
+5. **Limit API token scope** — Use a Cloudflare API token scoped only to the Workers and KV resources this project needs.
 
-The worker stores garage door state in Cloudflare KV. It does not store myQ account credentials — state is derived from forwarded notification emails only.
+The worker stores garage door state and alert webhook settings in Cloudflare KV. It does not store myQ account credentials — state is derived from forwarded notification emails only.
