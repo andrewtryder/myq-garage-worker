@@ -44,12 +44,18 @@ describe('doors helpers', () => {
       expect(routeRequiresAuth(new Request('https://worker.dev/'), env)).toBe(false);
     });
 
-    it('requires auth for /devices, ?json=true, and POST /simulate', () => {
+    it('requires auth for /devices, ?json=true, POST /simulate, and POST /simulate-alert', () => {
       expect(routeRequiresAuth(new Request('https://worker.dev/devices'), env)).toBe(true);
       expect(routeRequiresAuth(new Request('https://worker.dev/?json=true'), env)).toBe(true);
       expect(
         routeRequiresAuth(
           new Request('https://worker.dev/simulate', { method: 'POST', body: '{}' }),
+          env,
+        ),
+      ).toBe(true);
+      expect(
+        routeRequiresAuth(
+          new Request('https://worker.dev/simulate-alert', { method: 'POST', body: '{}' }),
           env,
         ),
       ).toBe(true);

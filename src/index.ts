@@ -1,8 +1,9 @@
 import { Env } from './types';
-import { getDoorState, saveDoorState } from './storage';
+import { saveDoorState } from './storage';
 import { mapActionToStatus, parseMyQSubject, resolveDoorKey } from './email-parser';
-import { renderStatusPage, formatDuration } from './status-page';
-import { buildHaDevices, loadAllDoors, parseConfiguredDoors, routeRequiresAuth } from './doors';
+import { renderStatusPage } from './status-page';
+import { getAlertThresholdMinutes, runOpenDoorAlerts } from './alerts';
+import { buildHaDevices, loadAllDoors, routeRequiresAuth } from './doors';
 
 export type { Env };
 
@@ -64,65 +65,8 @@ export default {
       return;
     }
 
-    const thresholdStr = env.ALERT_OPEN_THRESHOLD_MINUTES || '60';
-    const thresholdMinutes = parseInt(thresholdStr, 10);
-
-    if (isNaN(thresholdMinutes) || thresholdMinutes <= 0) {
-      console.error('Invalid ALERT_OPEN_THRESHOLD_MINUTES value:', thresholdStr);
-      return;
-    }
-
-    const thresholdMs = thresholdMinutes * 60 * 1000;
-    const nowMs = Date.now();
-
     try {
-      const configuredDoors = parseConfiguredDoors(env);
-
-      for (const [doorName, doorKey] of Object.entries(configuredDoors)) {
-        const state = await getDoorState(env, doorKey);
-
-        if (state.value === 'OPEN' && state.createdAt) {
-          const createdAtMs = new Date(state.createdAt).getTime();
-
-          if (!isNaN(createdAtMs)) {
-            const durationMs = nowMs - createdAtMs;
-
-            if (durationMs > thresholdMs) {
-              const durationText = formatDuration(durationMs);
-              console.log(`Alert! ${doorName} has been open for ${durationText}.`);
-
-              const payload = {
-                title: 'Garage Door Alert',
-                message: `${doorName} has been open for ${durationText}.`,
-                door: doorName,
-                state: state.value,
-                durationMs: durationMs,
-                durationText: durationText,
-              };
-
-              try {
-                const response = await fetch(env.WEBHOOK_URL, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify(payload),
-                });
-
-                if (!response.ok) {
-                  console.error(
-                    `Failed to send webhook for ${doorName}. Status: ${response.status}`,
-                  );
-                } else {
-                  console.log(`Successfully sent webhook for ${doorName}.`);
-                }
-              } catch (webhookErr) {
-                console.error(`Error sending webhook for ${doorName}:`, webhookErr);
-              }
-            }
-          }
-        }
-      }
+      await runOpenDoorAlerts(env);
     } catch (err) {
       console.error('Error in scheduled handler:', err);
     }
@@ -185,6 +129,25 @@ export default {
         }
       }
 
+      if (request.method === 'POST' && url.pathname === '/simulate-alert') {
+        try {
+          const body = (await request.json()) as { forceDoorName?: string };
+          const results = await runOpenDoorAlerts(env, {
+            forceDoorName: body.forceDoorName,
+          });
+
+          return new Response(JSON.stringify({ results }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch {
+          return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
       const { allDoorData, doors, combinedHistory } = await loadAllDoors(env);
 
       if (request.method === 'GET' && url.pathname === '/devices') {
@@ -204,7 +167,16 @@ export default {
         });
       }
 
-      const html = renderStatusPage(doors, combinedHistory);
+      const openDoorNames = allDoorData
+        .filter((door) => door.state.value === 'OPEN')
+        .map((door) => door.name);
+
+      const html = renderStatusPage(doors, combinedHistory, {
+        doorNames: allDoorData.map((door) => door.name),
+        openDoorNames,
+        webhookConfigured: !!env.WEBHOOK_URL,
+        alertThresholdMinutes: getAlertThresholdMinutes(env),
+      });
 
       return new Response(html, {
         status: 200,

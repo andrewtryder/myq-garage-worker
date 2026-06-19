@@ -75,7 +75,7 @@ You're done! Open, close, or stop your garage door. Within a few seconds, the em
 
 ## 5. Protect API routes with an API Key
 
-To protect machine-facing routes (`GET /devices`, `GET /?json=true`, `POST /simulate`) while keeping the HTML dashboard at `/` public, create a secret `API_KEY`.
+To protect machine-facing routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /simulate-alert`) while keeping the HTML dashboard at `/` public, create a secret `API_KEY`.
 
 - _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
 - _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.

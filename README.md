@@ -36,7 +36,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 | Variable Name  | Description                                                                                                                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                 |
-| `API_KEY`      | _(Optional)_ Secret key protecting API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`). The HTML status dashboard at `/` stays public so you can bookmark it in a browser. Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
+| `API_KEY`      | _(Optional)_ Secret key protecting API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /simulate-alert`). The HTML status dashboard at `/` stays public so you can bookmark it in a browser. Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
 
 **Example configuration:**
 
@@ -87,9 +87,18 @@ To ensure your dashboard UI updates correctly without having to open/close your 
 ### Option 1: Web UI Simulator
 
 Open your deployed worker URL in a browser. At the top of the screen, switch to the **Simulator** tab.
-You can use the form to enter a door name (exactly as configured), an action (opened, closed, stopped), and your API key (if set) to simulate an event. You can also paste the raw subject line from a real myQ notification email.
+Choose a configured door from the dropdown, pick an action (opened, closed, stopped), and enter your API key if configured.
 
-### Option 2: CLI Script
+### Option 2: Alert Test tab
+
+Switch to the **Alert Test** tab to exercise the left-open webhook alert (same JSON `POST` the cron job sends every 15 minutes when a door exceeds `ALERT_OPEN_THRESHOLD_MINUTES`):
+
+- **Run alert check** — same logic as the scheduled cron (only sends if a door has been open past the threshold)
+- **Force test alert** — sends the webhook for a selected open door immediately, regardless of threshold (useful for testing Apprise, ntfy, etc.)
+
+Both buttons call `POST /simulate-alert` (requires `API_KEY` when set). The tab shows whether `WEBHOOK_URL` is configured and the current threshold.
+
+### Option 3: CLI Script
 
 You can use the included CLI script from your terminal to ping the live (or local) worker:
 
@@ -98,7 +107,7 @@ You can use the included CLI script from your terminal to ping the live (or loca
 node scripts/test-live.js https://my-worker.workers.dev "Garage Door Left" opened
 ```
 
-Both options talk to a dedicated `POST /simulate` endpoint which bypasses the strict email "From:" address validations but executes the exact same parsing and Cloudflare KV storage updates as a real email.
+Both simulator options talk to dedicated endpoints (`POST /simulate` for door state, `POST /simulate-alert` for webhooks) which bypass the strict email "From:" address validations but execute the same parsing and storage/alert logic as production.
 
 ## Formatting & Linting
 
