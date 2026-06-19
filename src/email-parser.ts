@@ -1,4 +1,5 @@
 import { Env, DoorStatus } from './types';
+import { parseConfiguredDoors } from './doors';
 
 export interface MyQParsedSubject {
   deviceName: string;
@@ -20,23 +21,7 @@ export function parseMyQSubject(subject: string): MyQParsedSubject | null {
 }
 
 export function resolveDoorKey(deviceName: string, env: Env): string | null {
-  let configuredDoors: Record<string, string> = {};
-
-  if (typeof env.GARAGE_DOORS === 'string') {
-    try {
-      configuredDoors = JSON.parse(env.GARAGE_DOORS);
-    } catch {
-      console.error('Failed to parse GARAGE_DOORS JSON string');
-      return null;
-    }
-  } else if (
-    typeof env.GARAGE_DOORS === 'object' &&
-    env.GARAGE_DOORS !== null &&
-    !Array.isArray(env.GARAGE_DOORS)
-  ) {
-    configuredDoors = env.GARAGE_DOORS;
-  }
-
+  const configuredDoors = parseConfiguredDoors(env);
   // Exact match (case insensitive) on keys
   const targetNameLower = deviceName.toLowerCase();
   for (const [name, key] of Object.entries(configuredDoors)) {

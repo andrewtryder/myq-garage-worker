@@ -2,7 +2,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { loadDotEnv } from './setup-config.js';
 
 const GARAGE_DOORS_VAR_PATTERN =
@@ -108,7 +108,10 @@ export function deployWorker(options = {}) {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isMainModule =
+  process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (isMainModule) {
   const dryRun = process.argv.includes('--dry-run');
   const injectOnly = process.argv.includes('--inject-only');
   loadDotEnv();

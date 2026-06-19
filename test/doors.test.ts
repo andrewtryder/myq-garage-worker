@@ -1,8 +1,30 @@
 import { describe, it, expect } from 'vitest';
-import { buildHaDevices, mapHaDeviceStatus, routeRequiresAuth } from '../src/doors';
+import { buildHaDevices, mapHaDeviceStatus, parseGarageDoorsString, routeRequiresAuth } from '../src/doors';
 import { Env } from '../src/types';
 
 describe('doors helpers', () => {
+  describe('parseGarageDoorsString', () => {
+    it('parses valid JSON', () => {
+      expect(
+        parseGarageDoorsString('{"Garage Door Left":"garage-left","Garage Door Right":"garage-right"}'),
+      ).toEqual({
+        'Garage Door Left': 'garage-left',
+        'Garage Door Right': 'garage-right',
+      });
+    });
+
+    it('parses legacy shell-mangled format from older deploys', () => {
+      expect(
+        parseGarageDoorsString(
+          "'{Garage Door Left:garage-left,Garage Door Right:garage-right}'",
+        ),
+      ).toEqual({
+        'Garage Door Left': 'garage-left',
+        'Garage Door Right': 'garage-right',
+      });
+    });
+  });
+
   describe('mapHaDeviceStatus', () => {
     it('maps OPEN and CLOSED to lowercase HA statuses', () => {
       expect(mapHaDeviceStatus('OPEN')).toBe('open');

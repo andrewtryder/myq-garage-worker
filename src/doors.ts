@@ -9,14 +9,55 @@ export interface LoadedDoor {
   history: DoorState[];
 }
 
+export function parseGarageDoorsString(raw: string): Record<string, string> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+  } catch {
+    // fall through to legacy formats
+  }
+
+  let legacy = trimmed;
+  if (legacy.startsWith("'") && legacy.endsWith("'")) {
+    legacy = legacy.slice(1, -1);
+    try {
+      const parsed = JSON.parse(legacy) as unknown;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, string>;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // Legacy shell-mangled format: {Garage Door Left:garage-left,Garage Door Right:garage-right}
+  const inner = legacy.replace(/^\{|\}$/g, '').trim();
+  if (!inner) return {};
+
+  const result: Record<string, string> = {};
+  for (const part of inner.split(',')) {
+    const colon = part.indexOf(':');
+    if (colon === -1) continue;
+    const name = part.slice(0, colon).trim();
+    const key = part.slice(colon + 1).trim();
+    if (name && key) result[name] = key;
+  }
+
+  return result;
+}
+
 export function parseConfiguredDoors(env: Env): Record<string, string> {
   if (typeof env.GARAGE_DOORS === 'string') {
-    try {
-      return JSON.parse(env.GARAGE_DOORS);
-    } catch {
+    const configuredDoors = parseGarageDoorsString(env.GARAGE_DOORS);
+    if (Object.keys(configuredDoors).length === 0 && env.GARAGE_DOORS.trim()) {
       console.error('Failed to parse GARAGE_DOORS JSON string');
-      return {};
     }
+    return configuredDoors;
   }
 
   if (
