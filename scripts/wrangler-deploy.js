@@ -5,8 +5,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadDotEnv } from './setup-config.js';
 
-const GARAGE_DOORS_VAR_PATTERN =
-  /\n\s*"GARAGE_DOORS"\s*:\s*(?:"(?:\\.|[^"\\])*"|\{[^}]*\}),?/g;
+const GARAGE_DOORS_VAR_PATTERN = /\n\s*"GARAGE_DOORS"\s*:\s*(?:"(?:\\.|[^"\\])*"|\{[^}]*\}),?/g;
 
 /**
  * Patch wrangler.jsonc for deploy without shell-quoting issues.
@@ -27,8 +26,7 @@ export function injectDeployVars(wranglerPath, { kvNamespaceId, garageDoors } = 
   }
 
   if (garageDoors !== undefined && garageDoors !== null && garageDoors !== '') {
-    const jsonStr =
-      typeof garageDoors === 'string' ? garageDoors : JSON.stringify(garageDoors);
+    const jsonStr = typeof garageDoors === 'string' ? garageDoors : JSON.stringify(garageDoors);
     const parsed = JSON.parse(jsonStr);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new Error('GARAGE_DOORS must be a JSON object mapping door names to KV keys');

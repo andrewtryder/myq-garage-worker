@@ -30,11 +30,7 @@ function isAuthorized(request: Request, env: Env): boolean {
 
 function unauthorizedResponse(request: Request, _env: Env): Response {
   const url = new URL(request.url);
-  if (
-    request.method === 'GET' &&
-    url.pathname === '/' &&
-    url.searchParams.get('json') !== 'true'
-  ) {
+  if (request.method === 'GET' && url.pathname === '/' && url.searchParams.get('json') !== 'true') {
     return new Response(renderUnlockPage(), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
