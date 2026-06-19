@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.0.0...myq-garage-worker-v1.0.1) (2026-06-19)
+
+
+### Performance Improvements
+
+* cache resolved garage doors in resolveDoorKey ([306d7f2](https://github.com/andrewtryder/myq-garage-worker/commit/306d7f27b3b2ab34a45264444fb0f97ab4d2f3c7))
+* optimize combinedHistory generation in doors.ts ([b77709f](https://github.com/andrewtryder/myq-garage-worker/commit/b77709f47ba4238d53caf561f28f3bb5415139eb))
+
 ## [1.0.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.10...myq-garage-worker-v1.0.0) (2026-06-19)
 
 ### ⚠ BREAKING CHANGES
