@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.10...myq-garage-worker-v0.2.0) (2026-06-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22))
+* WEBHOOK_URL and ALERT_OPEN_THRESHOLD_MINUTES env vars are removed; configure alerts in the dashboard Alerts tab (stored in KV). POST /simulate-alert is removed; use POST /alert-config and POST /test-alert. When API_KEY is set, GET / requires authentication (unlock page).
+
+### Features
+
+* Alerts KV config and unified API_KEY auth ([#22](https://github.com/andrewtryder/myq-garage-worker/issues/22)) ([79f683f](https://github.com/andrewtryder/myq-garage-worker/commit/79f683fdacefbc4d9e6fdce67aba739516a1afff))
+* improve dashboard UI and add Alert Test tab ([08aea79](https://github.com/andrewtryder/myq-garage-worker/commit/08aea7955871a894b8752980a075ba6c17d83435))
+* improve dashboard UI and add Alert Test tab ([6993795](https://github.com/andrewtryder/myq-garage-worker/commit/6993795212db5fe2b4d5ec693829099d974ca5e0))
+* redesign Alerts tab with KV config and unified API_KEY auth ([2c547e1](https://github.com/andrewtryder/myq-garage-worker/commit/2c547e1bb4ee904cf2c6a1584e262eeb1560f143))
+
 ## [0.1.10](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v0.1.9...myq-garage-worker-v0.1.10) (2026-06-18)
 
 
