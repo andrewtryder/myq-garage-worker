@@ -76,6 +76,12 @@ describe('storage KV tests', () => {
       expect(result.value).toBe('UNKNOWN');
       expect(result.createdAt).toBe('');
     });
+
+    it('returns UNKNOWN if data is unparseable', async () => {
+      await mockKV.put('invalid-door', '{invalid');
+      const result = await getDoorState(mockEnv, 'invalid-door');
+      expect(result).toEqual({ value: 'UNKNOWN', createdAt: '' });
+    });
   });
 
   describe('getDoorHistory', () => {
