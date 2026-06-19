@@ -1,6 +1,6 @@
 {
   "name": "myq-garage-worker",
-  "version": "0.1.10",
+  "version": "1.0.0",
   "description": "Cloudflare Worker that parses myQ garage door notification emails and serves a live status dashboard",
   "author": "Andrew Tryder",
   "license": "MIT",
