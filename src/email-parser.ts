@@ -1,8 +1,39 @@
-import { Env, DoorStatus } from './types';
+import { loadConfig } from './config';
+import { DoorStatus, Env } from './types';
 
 export interface MyQParsedSubject {
   deviceName: string;
   action: string;
+}
+
+export const MYQ_ENVELOPE_SENDER = 'notification@myq.com';
+
+export function normalizeEnvelopeAddress(address: string): string {
+  return address.trim().toLowerCase();
+}
+
+/** @deprecated Use normalizeEnvelopeAddress */
+export function normalizeEnvelopeSender(from: string): string {
+  return normalizeEnvelopeAddress(from);
+}
+
+export function isMyQEnvelopeSender(from: string): boolean {
+  return normalizeEnvelopeAddress(from) === MYQ_ENVELOPE_SENDER;
+}
+
+export function isAllowedRecipient(to: string, allowedEmailTo: string | undefined): boolean {
+  if (!allowedEmailTo) return true;
+  return normalizeEnvelopeAddress(to) === allowedEmailTo;
+}
+
+/**
+ * When Authentication-Results is present, reject clear DKIM/DMARC failures.
+ * Missing header is allowed (Cloudflare Email Routing does not always surface it).
+ */
+export function hasFailedEmailAuthentication(authenticationResults: string | null): boolean {
+  if (!authenticationResults) return false;
+  const lower = authenticationResults.toLowerCase();
+  return /\bdkim\s*=\s*fail\b/.test(lower) || /\bdmarc\s*=\s*fail\b/.test(lower);
 }
 
 export function parseMyQSubject(subject: string): MyQParsedSubject | null {
@@ -30,29 +61,9 @@ export function resetDoorKeyCache(): void {
 }
 
 export function resolveDoorKey(deviceName: string, env: Env): string | null {
-  // Check if our cache is still valid
   if (cachedDoorsRawEnvValue !== env.GARAGE_DOORS || cachedLowercasedDoors === null) {
-    let configuredDoors: Record<string, string> = {};
+    const configuredDoors = loadConfig(env).garageDoors;
 
-    if (typeof env.GARAGE_DOORS === 'string') {
-      try {
-        configuredDoors = JSON.parse(env.GARAGE_DOORS);
-      } catch {
-        console.error('Failed to parse GARAGE_DOORS JSON string');
-        // Cache the failure so we don't keep trying to parse invalid JSON on every call
-        cachedDoorsRawEnvValue = env.GARAGE_DOORS;
-        cachedLowercasedDoors = {};
-        return null;
-      }
-    } else if (
-      typeof env.GARAGE_DOORS === 'object' &&
-      env.GARAGE_DOORS !== null &&
-      !Array.isArray(env.GARAGE_DOORS)
-    ) {
-      configuredDoors = env.GARAGE_DOORS;
-    }
-
-    // Build the lowercased map
     const lowercasedMap: Record<string, string> = {};
     for (const [name, key] of Object.entries(configuredDoors)) {
       lowercasedMap[name.toLowerCase()] = key;

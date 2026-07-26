@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { injectDeployVars, removeInjectedGarageDoors } from '../scripts/wrangler-deploy.js';
+import {
+  injectDeployVars,
+  removeInjectedGarageDoors,
+  writeDeployConfig,
+} from '../scripts/wrangler-deploy.js';
 
 const BASE_WRANGLER = `{
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -58,5 +62,19 @@ describe('injectDeployVars', () => {
 
     const content = fs.readFileSync(wranglerPath, 'utf8');
     expect(content).not.toContain('GARAGE_DOORS');
+  });
+
+  it('writes deploy config to a temp file without mutating the source', () => {
+    const original = fs.readFileSync(wranglerPath, 'utf8');
+    const tmpPath = writeDeployConfig({
+      sourcePath: wranglerPath,
+      kvNamespaceId: 'abc123',
+      garageDoors: { 'Garage Door Left': 'garage-left' },
+    });
+
+    expect(fs.readFileSync(wranglerPath, 'utf8')).toBe(original);
+    expect(tmpPath).not.toBe(wranglerPath);
+    expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"GARAGE_DOORS"');
+    expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"id": "abc123"');
   });
 });

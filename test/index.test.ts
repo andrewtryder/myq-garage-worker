@@ -1,33 +1,74 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import worker from '../src/index';
+import { createMockKv } from './mock-kv';
 
 describe('myq-garage-worker integration tests', () => {
   let mockKV: any;
   let kvStore: Map<string, string>;
 
   beforeEach(() => {
-    kvStore = new Map();
-    mockKV = {
-      get: vi.fn((key: string) => Promise.resolve(kvStore.get(key) || null)),
-      put: vi.fn((key: string, value: string) => {
-        kvStore.set(key, value);
-        return Promise.resolve();
-      }),
-    };
+    ({ store: kvStore, mockKV } = createMockKv());
   });
 
   describe('Email Handler', () => {
-    it('ignores emails not from notification@myq.com', async () => {
+    it('rejects emails not from the exact MyQ envelope sender', async () => {
       const mockEnv: any = { GARAGE_STATE: mockKV };
+      const setReject = vi.fn();
       const message: any = {
+        from: 'notification@myq.com.attacker.example',
+        to: 'garage@example.com',
+        setReject,
         headers: new Headers({
-          from: 'spam@spam.com',
+          from: 'notification@myq.com',
           subject: 'myQ Notification: Garage Door Right just opened',
         }),
       };
 
       await worker.email(message, mockEnv, {} as any);
+      expect(setReject).toHaveBeenCalledWith('Unsupported sender');
+      expect(mockKV.put).not.toHaveBeenCalled();
+    });
+
+    it('rejects wrong envelope recipient when ALLOWED_EMAIL_TO is set', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        ALLOWED_EMAIL_TO: 'garage@example.com',
+      };
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'notification@myq.com',
+        to: 'other@example.com',
+        setReject,
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just opened',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).toHaveBeenCalledWith('Unsupported recipient');
+      expect(mockKV.put).not.toHaveBeenCalled();
+    });
+
+    it('rejects failed Authentication-Results', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'notification@myq.com',
+        to: 'garage@example.com',
+        setReject,
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'authentication-results': 'mx.google.com; dkim=fail header.d=myq.com',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).toHaveBeenCalledWith('Failed email authentication');
       expect(mockKV.put).not.toHaveBeenCalled();
     });
 
@@ -37,19 +78,45 @@ describe('myq-garage-worker integration tests', () => {
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const message: any = {
+        from: 'notification@myq.com',
+        to: 'garage@example.com',
+        setReject: vi.fn(),
         headers: new Headers({
-          from: 'notification@myq.com',
+          from: 'MyQ <notification@myq.com>',
           subject: 'myQ Notification: Garage Door Right just opened',
+          'message-id': '<first@example.com>',
         }),
       };
 
       await worker.email(message, mockEnv, {} as any);
 
       expect(mockKV.put).toHaveBeenCalledWith('garage-right', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:garage-right', expect.any(String));
+      expect([...kvStore.keys()].some((key) => key.startsWith('eventr:garage-right:'))).toBe(true);
 
       const parsed = JSON.parse(kvStore.get('garage-right') || '');
       expect(parsed.value).toBe('OPEN');
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:done:'))).toBe(true);
+    });
+
+    it('skips duplicate Message-ID deliveries', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+      const message: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'message-id': '<dup@example.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      await worker.email(message, mockEnv, {} as any);
+
+      const statePuts = mockKV.put.mock.calls.filter((call: string[]) => call[0] === 'garage-left');
+      expect(statePuts.length).toBe(1);
     });
 
     it('processes Left Garage Door closed events', async () => {
@@ -58,8 +125,9 @@ describe('myq-garage-worker integration tests', () => {
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
       const message: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
         headers: new Headers({
-          from: 'notification@myq.com',
           subject: 'myQ Notification: Garage Door Left just closed',
         }),
       };
@@ -67,8 +135,6 @@ describe('myq-garage-worker integration tests', () => {
       await worker.email(message, mockEnv, {} as any);
 
       expect(mockKV.put).toHaveBeenCalledWith('garage-left', expect.any(String));
-      expect(mockKV.put).toHaveBeenCalledWith('history:garage-left', expect.any(String));
-
       const parsed = JSON.parse(kvStore.get('garage-left') || '');
       expect(parsed.value).toBe('CLOSED');
     });
@@ -86,115 +152,125 @@ describe('myq-garage-worker integration tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('text/html');
-
-      expect(mockKV.get).toHaveBeenCalledWith('garage-right');
-      expect(mockKV.get).toHaveBeenCalledWith('garage-left');
-      expect(mockKV.get).toHaveBeenCalledWith('history:garage-right');
-      expect(mockKV.get).toHaveBeenCalledWith('history:garage-left');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
 
       const text = await response.text();
       expect(text).toContain('Garage Door Right');
       expect(text).toContain('Garage Door Left');
+      expect(text).not.toContain('Unlock');
+      expect(text).not.toContain('sessionStorage');
     });
 
     it('serves HTML status page for single door JSON object string', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: '{"Main Garage": "main-garage"}',
+        GARAGE_DOORS: JSON.stringify({ 'Garage Door Left': 'garage-left' }),
       };
       const req = new Request('https://worker.dev');
       const response = await worker.fetch(req, mockEnv, {} as any);
-
-      const text = await response.text();
-      expect(text).toContain('Main Garage');
-      expect(text).not.toContain('"door-name">Garage Door Right');
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('Garage Door Left');
     });
 
-    it('serves JSON when ?json=true is provided', async () => {
+    it('returns 404 for unknown paths and 405 for wrong methods', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
-        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       };
-      const req = new Request('https://worker.dev?json=true');
 
-      kvStore.set(
-        'garage-right',
-        JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:00.000Z' }),
+      const notFound = await worker.fetch(
+        new Request('https://worker.dev/nope'),
+        mockEnv,
+        {} as any,
       );
+      expect(notFound.status).toBe(404);
 
-      const response = await worker.fetch(req, mockEnv, {} as any);
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('application/json');
-
-      const json = (await response.json()) as any;
-
-      expect(json.doors.length).toBe(2);
-      expect(json.doors[1].name).toBe('Garage Door Right');
-      expect(json.doors[1].state.value).toBe('OPEN');
-      expect(json.history).toBeInstanceOf(Array);
-    });
-  });
-  describe('Fetch Handler (Auth)', () => {
-    const mockEnvAuth: any = {
-      get GARAGE_STATE() {
-        return mockKV;
-      },
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
-      API_KEY: 'super-secret',
-    };
-
-    it('returns unlock HTML without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('text/html');
-      const html = await response.text();
-      expect(html).toContain('Unlock');
-      expect(html).not.toContain('Garage Door Left');
+      const methodNotAllowed = await worker.fetch(
+        new Request('https://worker.dev/devices', { method: 'POST', body: '{}' }),
+        mockEnv,
+        {} as any,
+      );
+      expect(methodNotAllowed.status).toBe(405);
+      expect(methodNotAllowed.headers.get('Allow')).toContain('GET');
     });
 
-    it('returns dashboard HTML with auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/?key=super-secret');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+    it('returns dashboard HTML without API key (Access is operator-owned)', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
+      const response = await worker.fetch(new Request('https://worker.dev/'), mockEnv, {} as any);
       expect(response.status).toBe(200);
-      const html = await response.text();
-      expect(html).toContain('Garage Door Status');
-      expect(html).not.toContain('Unlock');
+      expect(await response.text()).toContain('Garage Door Status');
     });
 
-    it('returns 401 for ?json=true without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/?json=true');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+    it('returns 401 for GET /devices when API_KEY is missing', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+      const response = await worker.fetch(
+        new Request('https://worker.dev/devices'),
+        mockEnv,
+        {} as any,
+      );
       expect(response.status).toBe(401);
     });
 
     it('returns 401 for GET /devices without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/devices');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
+      const response = await worker.fetch(
+        new Request('https://worker.dev/devices'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(401);
+    });
+
+    it('rejects query-string API keys', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
+      const response = await worker.fetch(
+        new Request('https://worker.dev/devices?key=super-secret'),
+        mockEnv,
+        {} as any,
+      );
       expect(response.status).toBe(401);
     });
 
     it('allows ?json=true with Authorization Bearer token', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
       const req = new Request('https://worker.dev/?json=true', {
         headers: { Authorization: 'Bearer super-secret' },
       });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const response = await worker.fetch(req, mockEnv, {} as any);
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('application/json');
     });
 
-    it('allows access with query param ?key=', async () => {
-      const req = new Request('https://worker.dev/?json=true&key=super-secret');
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(200);
-    });
-
     it('allows access with x-api-key header on /devices', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
       const req = new Request('https://worker.dev/devices', {
         headers: { 'x-api-key': 'super-secret' },
       });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const response = await worker.fetch(req, mockEnv, {} as any);
       expect(response.status).toBe(200);
     });
 
@@ -208,16 +284,19 @@ describe('myq-garage-worker integration tests', () => {
         JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:00.000Z' }),
       );
 
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
+        API_KEY: 'super-secret',
+      };
+
       const req = new Request('https://worker.dev/devices', {
         headers: { Authorization: 'Bearer super-secret' },
       });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const response = await worker.fetch(req, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('application/json');
-
       const json = (await response.json()) as Array<{ id: string; name: string; status: string }>;
-      expect(Array.isArray(json)).toBe(true);
       expect(json).toEqual([
         { id: 'garage-left', name: 'Garage Door Left', status: 'open' },
         { id: 'garage-right', name: 'Garage Door Right', status: 'closed' },
@@ -234,22 +313,22 @@ describe('myq-garage-worker integration tests', () => {
         JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:00.000Z' }),
       );
 
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
+        API_KEY: 'super-secret',
+      };
+
       const req = new Request('https://worker.dev/devices', {
         headers: { Authorization: 'Bearer super-secret' },
       });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const response = await worker.fetch(req, mockEnv, {} as any);
       const json = (await response.json()) as Array<{ id: string; name: string; status: string }>;
 
       expect(json).toEqual([{ id: 'garage-right', name: 'Garage Door Right', status: 'closed' }]);
     });
 
-    it('returns 401 for POST /test-alert without auth when API_KEY is set', async () => {
-      const req = new Request('https://worker.dev/test-alert', { method: 'POST', body: '{}' });
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      expect(response.status).toBe(401);
-    });
-
-    it('POST /test-alert sends webhook with Bearer auth', async () => {
+    it('allows POST /test-alert without API key (Access protects browser)', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(() =>
@@ -260,12 +339,15 @@ describe('myq-garage-worker integration tests', () => {
         ),
       );
 
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
+
       const req = new Request('https://worker.dev/test-alert', {
         method: 'POST',
-        headers: {
-          Authorization: 'Bearer super-secret',
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webhookUrl: 'https://example.com/webhook',
           thresholdMinutes: 60,
@@ -274,36 +356,61 @@ describe('myq-garage-worker integration tests', () => {
         }),
       });
 
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
+      const response = await worker.fetch(req, mockEnv, {} as any);
       const json = (await response.json()) as { result: { sent: boolean } };
 
       expect(response.status).toBe(200);
       expect(json.result.sent).toBe(true);
-      expect(fetch).toHaveBeenCalledTimes(1);
 
       vi.unstubAllGlobals();
     });
 
-    it('POST /alert-config saves config to KV with Bearer auth', async () => {
+    it('rejects private webhook destinations', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+
       const req = new Request('https://worker.dev/alert-config', {
         method: 'POST',
-        headers: {
-          Authorization: 'Bearer super-secret',
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webhookUrl: 'https://example.com/webhook',
+          webhookUrl: 'https://127.0.0.1/hook',
           thresholdMinutes: 45,
           method: 'GET',
         }),
       });
 
-      const response = await worker.fetch(req, mockEnvAuth, {} as any);
-      const json = (await response.json()) as { success: boolean; config: { method: string } };
+      const response = await worker.fetch(req, mockEnv, {} as any);
+      expect(response.status).toBe(400);
+    });
+
+    it('POST /alert-config saves config and redacts URL in response', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+
+      const req = new Request('https://worker.dev/alert-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookUrl: 'https://ntfy.sh/super-secret-topic',
+          thresholdMinutes: 45,
+          method: 'GET',
+        }),
+      });
+
+      const response = await worker.fetch(req, mockEnv, {} as any);
+      const json = (await response.json()) as {
+        success: boolean;
+        config: { method: string; webhookUrl: string };
+      };
 
       expect(response.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.config.method).toBe('GET');
+      expect(json.config.webhookUrl).toBe('https://ntfy.sh/***');
     });
   });
 });

@@ -94,5 +94,19 @@ describe('status-page utils', () => {
       expect(html).toContain('Garage Door Left');
       expect(html).not.toContain('simSubject');
     });
+
+    it('escapes malicious HTML in door names', () => {
+      const html = renderStatusPage(
+        [
+          {
+            name: '<img src=x onerror=alert(1)>',
+            state: { value: 'OPEN', createdAt: '2025-01-01T12:00:00Z' },
+          },
+        ],
+        [],
+      );
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(html).not.toContain('<img src=x onerror=alert(1)>');
+    });
   });
 });

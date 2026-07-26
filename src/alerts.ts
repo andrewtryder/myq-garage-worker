@@ -1,8 +1,9 @@
 import { AlertConfig, getAlertConfig } from './alert-config';
-import { parseConfiguredDoors } from './doors';
+import { loadConfig } from './config';
 import { formatDuration } from './status-page';
-import { getDoorState } from './storage';
+import { getAlertLatch, getDoorState, setAlertLatch } from './storage';
 import { Env } from './types';
+import { WEBHOOK_FETCH_TIMEOUT_MS } from './webhook-url';
 
 export interface AlertPayload {
   title: string;
@@ -23,6 +24,11 @@ export interface AlertResult {
 }
 
 export async function sendWebhook(config: AlertConfig, payload: AlertPayload): Promise<Response> {
+  const init: RequestInit = {
+    redirect: 'manual',
+    signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS),
+  };
+
   if (config.method === 'GET') {
     const url = new URL(config.webhookUrl);
     url.searchParams.set('title', payload.title);
@@ -31,14 +37,25 @@ export async function sendWebhook(config: AlertConfig, payload: AlertPayload): P
     url.searchParams.set('state', payload.state);
     url.searchParams.set('durationText', payload.durationText);
     url.searchParams.set('durationMs', String(payload.durationMs));
-    return fetch(url.toString(), { method: 'GET' });
+    return fetch(url.toString(), { ...init, method: 'GET' });
   }
 
   return fetch(config.webhookUrl, {
+    ...init,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+function genericWebhookError(err: unknown): string {
+  if (err instanceof DOMException && err.name === 'TimeoutError') {
+    return 'Webhook request timed out';
+  }
+  if (err instanceof Error && /abort|timeout/i.test(err.message)) {
+    return 'Webhook request timed out';
+  }
+  return 'Webhook request failed';
 }
 
 export async function testAlert(config: AlertConfig, doorName?: string): Promise<AlertResult> {
@@ -55,6 +72,15 @@ export async function testAlert(config: AlertConfig, doorName?: string): Promise
 
   try {
     const response = await sendWebhook(config, payload);
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        door: payload.door,
+        sent: false,
+        payload,
+        webhookStatus: response.status,
+        skippedReason: 'Webhook redirects are not allowed',
+      };
+    }
     return {
       door: payload.door,
       sent: response.ok,
@@ -63,14 +89,40 @@ export async function testAlert(config: AlertConfig, doorName?: string): Promise
       skippedReason: response.ok ? undefined : `Webhook returned HTTP ${response.status}`,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
     return {
       door: payload.door,
       sent: false,
       payload,
-      error: message,
+      error: genericWebhookError(err),
     };
   }
+}
+
+function shouldSendAlert(
+  latch: { openCreatedAt: string; lastAlertSentAt: string } | null,
+  openCreatedAt: string,
+  nowMs: number,
+  reminderMinutes: number | undefined,
+): { send: boolean; reason?: string } {
+  if (!latch || latch.openCreatedAt !== openCreatedAt) {
+    return { send: true };
+  }
+
+  if (!reminderMinutes || reminderMinutes <= 0) {
+    return { send: false, reason: 'Alert already sent for this open session' };
+  }
+
+  const lastSentMs = Date.parse(latch.lastAlertSentAt);
+  if (isNaN(lastSentMs)) {
+    return { send: true };
+  }
+
+  const reminderMs = reminderMinutes * 60 * 1000;
+  if (nowMs - lastSentMs >= reminderMs) {
+    return { send: true };
+  }
+
+  return { send: false, reason: 'Alert reminder cooldown active' };
 }
 
 export async function runOpenDoorAlerts(
@@ -85,12 +137,12 @@ export async function runOpenDoorAlerts(
   const thresholdMinutes = config.thresholdMinutes;
   const thresholdMs = thresholdMinutes * 60 * 1000;
   const nowMs = options?.nowMs ?? Date.now();
-  const configuredDoors = parseConfiguredDoors(env);
+  const { garageDoors } = loadConfig(env);
   const results: AlertResult[] = [];
 
   const doorsToCheck = options?.forceDoorName
-    ? Object.entries(configuredDoors).filter(([name]) => name === options.forceDoorName)
-    : Object.entries(configuredDoors);
+    ? Object.entries(garageDoors).filter(([name]) => name === options.forceDoorName)
+    : Object.entries(garageDoors);
 
   if (options?.forceDoorName && doorsToCheck.length === 0) {
     return [{ door: options.forceDoorName, sent: false, skippedReason: 'Unknown door name' }];
@@ -133,6 +185,19 @@ export async function runOpenDoorAlerts(
       continue;
     }
 
+    if (!force) {
+      const latch = await getAlertLatch(env, doorKey);
+      const decision = shouldSendAlert(latch, state.createdAt, nowMs, config.reminderMinutes);
+      if (!decision.send) {
+        results.push({
+          door: doorName,
+          sent: false,
+          skippedReason: decision.reason,
+        });
+        continue;
+      }
+    }
+
     const durationText = formatDuration(durationMs);
     const payload: AlertPayload = {
       title: 'Garage Door Alert',
@@ -146,27 +211,49 @@ export async function runOpenDoorAlerts(
     try {
       const response = await sendWebhook(config, payload);
 
+      if (response.status >= 300 && response.status < 400) {
+        results.push({
+          door: doorName,
+          sent: false,
+          payload,
+          webhookStatus: response.status,
+          skippedReason: 'Webhook redirects are not allowed',
+        });
+        continue;
+      }
+
+      const sent = response.ok;
+
       results.push({
         door: doorName,
-        sent: response.ok,
+        sent,
         payload,
         webhookStatus: response.status,
-        skippedReason: response.ok ? undefined : `Webhook returned HTTP ${response.status}`,
+        skippedReason: sent ? undefined : `Webhook returned HTTP ${response.status}`,
       });
 
-      if (response.ok) {
+      if (sent) {
         console.log(`Successfully sent webhook for ${doorName}.`);
+        if (!force) {
+          try {
+            await setAlertLatch(env, doorKey, {
+              openCreatedAt: state.createdAt,
+              lastAlertSentAt: new Date(nowMs).toISOString(),
+            });
+          } catch (error) {
+            console.error('Webhook sent but latch persistence failed', error);
+          }
+        }
       } else {
         console.error(`Failed to send webhook for ${doorName}. Status: ${response.status}`);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
       console.error(`Error sending webhook for ${doorName}:`, err);
       results.push({
         door: doorName,
         sent: false,
         payload,
-        error: message,
+        error: genericWebhookError(err),
       });
     }
   }

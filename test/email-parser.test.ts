@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  hasFailedEmailAuthentication,
+  isAllowedRecipient,
+  isMyQEnvelopeSender,
   parseMyQSubject,
   resolveDoorKey,
   mapActionToStatus,
@@ -106,6 +109,40 @@ describe('email-parser unit tests', () => {
 
     it('maps unknown action to UNKNOWN', () => {
       expect(mapActionToStatus('destroyed')).toBe('UNKNOWN');
+    });
+  });
+
+  describe('isMyQEnvelopeSender', () => {
+    it('matches only the exact MyQ envelope sender', () => {
+      expect(isMyQEnvelopeSender('notification@myq.com')).toBe(true);
+      expect(isMyQEnvelopeSender(' notification@myq.com ')).toBe(true);
+      expect(isMyQEnvelopeSender('notification@myq.com.attacker.example')).toBe(false);
+      expect(isMyQEnvelopeSender('evil@example.com')).toBe(false);
+    });
+  });
+
+  describe('isAllowedRecipient', () => {
+    it('allows any recipient when ALLOWED_EMAIL_TO is unset', () => {
+      expect(isAllowedRecipient('anything@example.com', undefined)).toBe(true);
+    });
+
+    it('requires exact normalized match when configured', () => {
+      expect(isAllowedRecipient('garage@example.com', 'garage@example.com')).toBe(true);
+      expect(isAllowedRecipient(' Garage@Example.com ', 'garage@example.com')).toBe(true);
+      expect(isAllowedRecipient('other@example.com', 'garage@example.com')).toBe(false);
+    });
+  });
+
+  describe('hasFailedEmailAuthentication', () => {
+    it('allows missing Authentication-Results', () => {
+      expect(hasFailedEmailAuthentication(null)).toBe(false);
+      expect(hasFailedEmailAuthentication('')).toBe(false);
+    });
+
+    it('rejects clear dkim/dmarc failures', () => {
+      expect(hasFailedEmailAuthentication('mx.google.com; dkim=fail header.d=myq.com')).toBe(true);
+      expect(hasFailedEmailAuthentication('mx.google.com; dmarc=fail action=none')).toBe(true);
+      expect(hasFailedEmailAuthentication('mx.google.com; dkim=pass header.d=myq.com')).toBe(false);
     });
   });
 });

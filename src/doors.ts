@@ -1,4 +1,5 @@
-import { Env, DoorState } from './types';
+import { loadConfig } from './config';
+import { DoorState, DoorStatus, Env } from './types';
 import { getDoorState, getDoorHistory } from './storage';
 import { DoorData, HistoryEntry, formatDuration } from './status-page';
 
@@ -9,25 +10,9 @@ export interface LoadedDoor {
   history: DoorState[];
 }
 
+/** @deprecated Use loadConfig(env).garageDoors — kept for scripts/tests that import by name. */
 export function parseConfiguredDoors(env: Env): Record<string, string> {
-  if (typeof env.GARAGE_DOORS === 'string') {
-    try {
-      return JSON.parse(env.GARAGE_DOORS);
-    } catch {
-      console.error('Failed to parse GARAGE_DOORS JSON string');
-      return {};
-    }
-  }
-
-  if (
-    typeof env.GARAGE_DOORS === 'object' &&
-    env.GARAGE_DOORS !== null &&
-    !Array.isArray(env.GARAGE_DOORS)
-  ) {
-    return env.GARAGE_DOORS;
-  }
-
-  return {};
+  return { ...loadConfig(env).garageDoors };
 }
 
 export async function loadAllDoors(env: Env): Promise<{
@@ -35,7 +20,7 @@ export async function loadAllDoors(env: Env): Promise<{
   doors: DoorData[];
   combinedHistory: HistoryEntry[];
 }> {
-  const configuredDoors = parseConfiguredDoors(env);
+  const configuredDoors = loadConfig(env).garageDoors;
 
   const doorDataPromises = Object.entries(configuredDoors).map(async ([doorName, doorKey]) => {
     const [state, history] = await Promise.all([
@@ -92,7 +77,9 @@ export async function loadAllDoors(env: Env): Promise<{
   };
 }
 
-export function mapHaDeviceStatus(value: string | undefined): 'open' | 'closed' | null {
+export function mapHaDeviceStatus(
+  value: DoorStatus | string | undefined,
+): 'open' | 'closed' | null {
   const upper = (value || '').toUpperCase();
   if (upper === 'OPEN') return 'open';
   if (upper === 'CLOSED') return 'closed';
@@ -111,19 +98,4 @@ export function buildHaDevices(allDoorData: LoadedDoor[]): HaDevice[] {
     if (!status) return [];
     return [{ id: door.key, name: door.name, status }];
   });
-}
-
-export function routeRequiresAuth(request: Request, env: Env): boolean {
-  if (!env.API_KEY) return false;
-
-  const url = new URL(request.url);
-
-  if (request.method === 'GET' && url.pathname === '/') return true;
-  if (request.method === 'POST' && url.pathname === '/simulate') return true;
-  if (request.method === 'POST' && url.pathname === '/alert-config') return true;
-  if (request.method === 'POST' && url.pathname === '/test-alert') return true;
-  if (request.method === 'GET' && url.pathname === '/devices') return true;
-  if (request.method === 'GET' && url.searchParams.get('json') === 'true') return true;
-
-  return false;
 }

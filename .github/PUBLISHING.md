@@ -18,7 +18,8 @@ In **Settings → Secrets and variables → Actions**:
 | ----------------------- | -------- | ----------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI                      |
 | `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys         |
-| `API_KEY`               | Secret   | Optional dashboard/API protection         |
+| `API_KEY`               | Secret   | Home Assistant `GET /devices` Bearer key  |
+| `ALLOWED_EMAIL_TO`      | Secret   | Exact inbound Email Routing recipient     |
 | `GARAGE_DOORS`          | Secret   | JSON door name → KV key mapping           |
 | `KV_NAMESPACE_ID`       | Variable | KV namespace ID (injected at deploy time) |
 

@@ -1,5 +1,5 @@
 import { DoorState } from './types';
-import { AlertConfig } from './alert-config';
+import { AlertConfig, toPublicAlertConfig } from './alert-config';
 
 export interface HistoryEntry extends DoorState {
   doorName: string;
@@ -16,7 +16,6 @@ export interface StatusPageOptions {
   doorNames?: string[];
   openDoorNames?: string[];
   alertConfig?: AlertConfig | null;
-  apiKeyRequired?: boolean;
 }
 
 function escapeHtml(value: string): string {
@@ -96,101 +95,6 @@ export function statusLabel(value: string | undefined): string {
   return value.toUpperCase();
 }
 
-export function renderUnlockPage(): string {
-  return `
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Unlock – Garage Status</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #1f2933, #050816);
-      color: #f9fafb;
-      display: flex;
-      min-height: 100vh;
-      align-items: center;
-      justify-content: center;
-    }
-    .wrapper {
-      max-width: 420px;
-      width: 100%;
-      padding: 24px;
-    }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
-    }
-    .subtitle {
-      margin-bottom: 24px;
-      color: #9ca3af;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .card {
-      background: rgba(15,23,42,0.9);
-      border-radius: 16px;
-      padding: 20px;
-      border: 1px solid rgba(148,163,184,0.2);
-    }
-    .sim-input {
-      width: 100%;
-      background: rgba(15,23,42,0.5);
-      border: 1px solid rgba(148,163,184,0.3);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #f9fafb;
-      font-size: 14px;
-      box-sizing: border-box;
-      outline: none;
-    }
-    .sim-btn {
-      background: #3b82f6;
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 16px;
-    }
-    label {
-      display: block;
-      margin-bottom: 4px;
-      font-size: 12px;
-      color: #9ca3af;
-    }
-  </style>
-</head>
-<body>
-  <div class="wrapper">
-    <h1>Garage Status</h1>
-    <div class="subtitle">Enter your API key to view the dashboard and manage alerts.</div>
-    <div class="card">
-      <form onsubmit="submitUnlock(event)">
-        <label for="unlockKey">API Key</label>
-        <input type="password" id="unlockKey" class="sim-input" placeholder="Your API_KEY" required autofocus />
-        <button type="submit" class="sim-btn">Unlock</button>
-      </form>
-    </div>
-  </div>
-  <script>
-    function submitUnlock(e) {
-      e.preventDefault();
-      const key = document.getElementById('unlockKey').value;
-      sessionStorage.setItem('apiKey', key);
-      window.location.href = '/?key=' + encodeURIComponent(key);
-    }
-  </script>
-</body>
-</html>`;
-}
-
 export function renderStatusPage(
   doors: DoorData[] = [],
   history: HistoryEntry[] = [],
@@ -198,8 +102,11 @@ export function renderStatusPage(
 ): string {
   const doorNames = options.doorNames ?? doors.map((door) => door.name);
   const alertConfig = options.alertConfig ?? null;
-  const apiKeyRequired = options.apiKeyRequired ?? false;
-  const webhookUrl = alertConfig?.webhookUrl ?? '';
+  const publicAlert = toPublicAlertConfig(alertConfig);
+  const hasSavedWebhook = Boolean(alertConfig?.webhookUrl);
+  const webhookPlaceholder = publicAlert?.webhookUrl
+    ? `${publicAlert.webhookUrl} (saved — enter a new URL to replace)`
+    : 'https://ntfy.sh/your-secret-topic';
   const thresholdMinutes = alertConfig?.thresholdMinutes ?? 60;
   const alertMethod = alertConfig?.method ?? 'POST';
   const nowMs = Date.now();
@@ -586,7 +493,7 @@ export function renderStatusPage(
       <div class="card history-card">
         <div style="margin-bottom:12px;">
           <label style="display:block;margin-bottom:4px;font-size:12px;color:#9ca3af;">Webhook URL</label>
-          <input type="url" id="alertWebhookUrl" value="${escapeHtml(webhookUrl)}" placeholder="https://ntfy.sh/your-secret-topic" class="sim-input" />
+          <input type="url" id="alertWebhookUrl" value="" placeholder="${escapeHtml(webhookPlaceholder)}" class="sim-input" data-has-saved="${hasSavedWebhook ? 'true' : 'false'}" />
         </div>
 
         <div style="margin-bottom:12px;">
@@ -619,38 +526,15 @@ export function renderStatusPage(
   </div>
 
   <script>
-    const apiKeyRequired = ${apiKeyRequired ? 'true' : 'false'};
-
-    (function bootstrapApiKey() {
-      const params = new URLSearchParams(window.location.search);
-      const keyFromUrl = params.get('key');
-      if (keyFromUrl) {
-        sessionStorage.setItem('apiKey', keyFromUrl);
-        params.delete('key');
-        const query = params.toString();
-        const newUrl = window.location.pathname + (query ? '?' + query : '');
-        history.replaceState({}, '', newUrl);
-      }
-    })();
-
-    function getApiKey() {
-      return sessionStorage.getItem('apiKey') || '';
+    function jsonHeaders() {
+      return { 'Content-Type': 'application/json' };
     }
 
-    function authHeaders(extra) {
-      const headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
-      if (apiKeyRequired) {
-        const key = getApiKey();
-        if (key) headers['Authorization'] = 'Bearer ' + key;
-      }
-      return headers;
-    }
-
-    async function authFetch(path, options) {
+    async function apiFetch(path, options) {
       const opts = options || {};
       return fetch(path, {
         method: opts.method || 'GET',
-        headers: authHeaders(opts.headers),
+        headers: Object.assign(jsonHeaders(), opts.headers || {}),
         body: opts.body
       });
     }
@@ -667,15 +551,17 @@ export function renderStatusPage(
     }
 
     function getAlertFormValues() {
+      const webhookInput = document.getElementById('alertWebhookUrl');
       return {
-        webhookUrl: document.getElementById('alertWebhookUrl').value.trim(),
+        webhookUrl: webhookInput.value.trim(),
+        hasSavedWebhook: webhookInput.getAttribute('data-has-saved') === 'true',
         thresholdMinutes: parseInt(document.getElementById('alertThreshold').value, 10),
         method: document.getElementById('alertMethod').value,
         doorName: document.getElementById('alertDoor').value
       };
     }
 
-    function showAlertResult(html, isError) {
+    function showAlertResult(message, isError) {
       const resDiv = document.getElementById('alertResult');
       resDiv.style.display = 'block';
       if (isError) {
@@ -687,7 +573,7 @@ export function renderStatusPage(
         resDiv.style.color = '#e5e7eb';
         resDiv.style.border = '1px solid rgba(148,163,184,0.3)';
       }
-      resDiv.innerHTML = html;
+      resDiv.textContent = message;
     }
 
     async function submitSimulation(e) {
@@ -705,7 +591,7 @@ export function renderStatusPage(
       };
 
       try {
-        const response = await authFetch('/simulate', {
+        const response = await apiFetch('/simulate', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
@@ -739,19 +625,19 @@ export function renderStatusPage(
 
     function formatTestResult(result) {
       if (result.sent) {
-        return '<div class="alert-success">Webhook sent (HTTP ' + result.webhookStatus + ')</div>';
+        return 'Webhook sent (HTTP ' + result.webhookStatus + ')';
       }
       if (result.error) {
-        return '<div class="alert-error">' + result.error + '</div>';
+        return result.error;
       }
-      return '<div class="alert-skipped">' + (result.skippedReason || 'Skipped') + '</div>';
+      return result.skippedReason || 'Skipped';
     }
 
     async function saveAlertConfig() {
       const btn = document.getElementById('alertSaveBtn');
       const values = getAlertFormValues();
 
-      if (!values.webhookUrl) {
+      if (!values.webhookUrl && !values.hasSavedWebhook) {
         showAlertResult('Webhook URL is required.', true);
         return;
       }
@@ -760,20 +646,26 @@ export function renderStatusPage(
       btn.textContent = 'Saving...';
 
       try {
-        const response = await authFetch('/alert-config', {
+        const body = {
+          thresholdMinutes: values.thresholdMinutes,
+          method: values.method
+        };
+        if (values.webhookUrl) {
+          body.webhookUrl = values.webhookUrl;
+        }
+
+        const response = await apiFetch('/alert-config', {
           method: 'POST',
-          body: JSON.stringify({
-            webhookUrl: values.webhookUrl,
-            thresholdMinutes: values.thresholdMinutes,
-            method: values.method
-          })
+          body: JSON.stringify(body)
         });
 
         const data = await response.json();
         if (response.ok) {
-          showAlertResult('<div class="alert-success">Alert settings saved.</div>', false);
+          document.getElementById('alertWebhookUrl').setAttribute('data-has-saved', 'true');
+          document.getElementById('alertWebhookUrl').value = '';
+          showAlertResult('Alert settings saved.', false);
         } else {
-          showAlertResult('<div class="alert-error">' + (data.error || 'Save failed') + '</div>', true);
+          showAlertResult(data.error || 'Save failed', true);
         }
       } catch (err) {
         showAlertResult('Network error: ' + err.message, true);
@@ -787,7 +679,7 @@ export function renderStatusPage(
       const btn = document.getElementById('alertTestBtn');
       const values = getAlertFormValues();
 
-      if (!values.webhookUrl) {
+      if (!values.webhookUrl && !values.hasSavedWebhook) {
         showAlertResult('Webhook URL is required.', true);
         return;
       }
@@ -796,21 +688,25 @@ export function renderStatusPage(
       btn.textContent = 'Testing...';
 
       try {
-        const response = await authFetch('/test-alert', {
+        const body = {
+          thresholdMinutes: values.thresholdMinutes,
+          method: values.method,
+          doorName: values.doorName
+        };
+        if (values.webhookUrl) {
+          body.webhookUrl = values.webhookUrl;
+        }
+
+        const response = await apiFetch('/test-alert', {
           method: 'POST',
-          body: JSON.stringify({
-            webhookUrl: values.webhookUrl,
-            thresholdMinutes: values.thresholdMinutes,
-            method: values.method,
-            doorName: values.doorName
-          })
+          body: JSON.stringify(body)
         });
 
         const data = await response.json();
         if (response.ok) {
-          showAlertResult(formatTestResult(data.result), false);
+          showAlertResult(formatTestResult(data.result), !data.result.sent);
         } else {
-          showAlertResult('<div class="alert-error">' + (data.error || 'Test failed') + '</div>', true);
+          showAlertResult(data.error || 'Test failed', true);
         }
       } catch (err) {
         showAlertResult('Network error: ' + err.message, true);

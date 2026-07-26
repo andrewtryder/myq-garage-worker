@@ -55,6 +55,8 @@ Now we need to create a dedicated email address on Cloudflare that will trigger 
 8. Select the `myq-garage-worker` you deployed in step 2.
 9. Save the rule.
 
+**Recommended:** set Worker var/secret `ALLOWED_EMAIL_TO` to that exact custom address (e.g. `garage@yourdomain.com`). The Worker rejects inbound mail whose envelope recipient does not match. Envelope MAIL FROM must be exactly `notification@myq.com`.
+
 ## 4. Setting up Email Forwarding
 
 Finally, you need to forward the notifications from your personal email to the Cloudflare Worker address you just created.
@@ -73,17 +75,64 @@ Finally, you need to forward the notifications from your personal email to the C
 
 You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your status dashboard!
 
-## 5. Protect routes with an API Key
+## 5. Protect the dashboard with Cloudflare Access
 
-Set an `API_KEY` secret to protect the dashboard and API routes:
+Browser authentication is **your responsibility**. Put the Worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/).
 
-- _Via GitHub Actions:_ Add `API_KEY` as a Repository Secret.
-- _Via Cloudflare Dashboard:_ Go to your Worker -> Settings -> Variables -> Add variable, enter `API_KEY`, enter your password/key, and click **Encrypt**.
+### Dashboard (humans)
 
-When `API_KEY` is set:
+1. Enable Access on the Worker (Workers → Settings → Domains & Routes → Enable Cloudflare Access), or create a self-hosted Access application for your hostname.
+2. Add an **Allow** policy for your identity (email, IdP group, etc.).
 
-- **`GET /`** shows an unlock page until you enter your key (or visit with `?key=YOUR_KEY`).
-- **`GET /devices`** requires auth — Home Assistant sends `Authorization: Bearer YOUR_API_KEY`.
-- **`POST /simulate`**, **`POST /alert-config`**, and **`POST /test-alert`** require auth for the Simulator and Alerts tabs.
+One-click Workers Access creates a **Worker-destination** application. That covers every path on the Worker and has no path field — do **not** attach a Bypass policy to it, or the whole dashboard becomes public.
 
-Configure left-open webhook alerts on the dashboard **Alerts** tab (settings are saved to KV, not environment variables).
+### Home Assistant path (`/devices`)
+
+HACS cannot complete an Access login. Create a **second** Access application whose `public` destination is only `/devices`. Cloudflare evaluates `public` destinations ahead of Worker destinations, so this override applies to that path alone. After bypass, the Worker `API_KEY` is the **only** protection on `/devices` — use a strong secret.
+
+Set `API_KEY` via GitHub Actions secrets or the Cloudflare dashboard (encrypted). Home Assistant must send `Authorization: Bearer YOUR_API_KEY` (or `x-api-key`). Without `API_KEY`, `/devices` returns 401.
+
+**Create the bypass app via API** (token needs `Access: Apps and Policies Write`):
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "myq-garage-worker /devices (Home Assistant)",
+    "type": "self_hosted",
+    "destinations": [
+      { "type": "public", "uri": "YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/devices" }
+    ],
+    "session_duration": "24h",
+    "app_launcher_visible": false,
+    "policies": [
+      {
+        "name": "Bypass - Home Assistant",
+        "decision": "bypass",
+        "include": [{ "everyone": {} }],
+        "precedence": 1
+      }
+    ]
+  }'
+```
+
+**Verify:**
+
+```bash
+# Expect 401 from the Worker (not a 302 to *.cloudflareaccess.com)
+curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/devices"
+
+# Expect 200 with device JSON
+curl -i -H "Authorization: Bearer $API_KEY" \
+  "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/devices"
+
+# Expect 302 to Access login (dashboard still protected)
+curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/"
+```
+
+`GET /?json=true` remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
+
+The dashboard itself does not ask for an API key. Mutation routes used by the Simulator and Alerts tabs rely on Access (or being unreachable from the public internet).
+
+Configure left-open webhook alerts on the dashboard **Alerts** tab (settings are saved to KV, not environment variables). Webhook URLs must be HTTPS and are validated against private/metadata destinations.
