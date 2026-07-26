@@ -122,6 +122,7 @@ export function fetchRemoteConfig(_workerName) {
     isDeployed: false,
     garageDoors: null,
     hasApiKey: false,
+    hasAllowedEmailTo: false,
     kvValid: false,
   };
 
@@ -157,8 +158,10 @@ export function fetchRemoteConfig(_workerName) {
   if (secretsRaw) {
     try {
       const secrets = JSON.parse(secretsRaw);
-      config.hasApiKey =
-        Array.isArray(secrets) && secrets.some((secret) => secret.name === 'API_KEY');
+      if (Array.isArray(secrets)) {
+        config.hasApiKey = secrets.some((secret) => secret.name === 'API_KEY');
+        config.hasAllowedEmailTo = secrets.some((secret) => secret.name === 'ALLOWED_EMAIL_TO');
+      }
     } catch {
       // Ignore malformed secret list responses.
     }
@@ -195,6 +198,7 @@ export async function detectExistingConfig(wranglerPath) {
     kvValid: false,
     garageDoors: null,
     hasApiKey: false,
+    hasAllowedEmailTo: false,
     isDeployed: false,
     auth,
   };
@@ -207,6 +211,7 @@ export async function detectExistingConfig(wranglerPath) {
   existingConfig.isDeployed = remote.isDeployed;
   existingConfig.garageDoors = remote.garageDoors;
   existingConfig.hasApiKey = remote.hasApiKey;
+  existingConfig.hasAllowedEmailTo = remote.hasAllowedEmailTo;
   existingConfig.kvValid = isKvIdValid(local.kvId);
 
   return existingConfig;

@@ -1,5 +1,5 @@
 import { Env } from './types';
-import { claimMessageId, saveDoorState } from './storage';
+import { beginMessageProcessing, completeMessageProcessing, saveDoorState } from './storage';
 import { loadConfig } from './config';
 import {
   hasFailedEmailAuthentication,
@@ -66,8 +66,8 @@ export default {
       }
 
       const messageId = message.headers.get('message-id');
-      if (await claimMessageId(env, messageId)) {
-        console.log('Duplicate Message-ID, skipping');
+      if (await beginMessageProcessing(env, messageId)) {
+        console.log('Duplicate or in-flight Message-ID, skipping');
         return;
       }
 
@@ -89,6 +89,7 @@ export default {
 
       const value = mapActionToStatus(action);
       await saveDoorState(env, doorKey, value);
+      await completeMessageProcessing(env, messageId);
     } catch (err) {
       console.error('Error handling MyQ email:', err);
     }

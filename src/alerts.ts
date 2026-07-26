@@ -222,21 +222,27 @@ export async function runOpenDoorAlerts(
         continue;
       }
 
+      const sent = response.ok;
+
       results.push({
         door: doorName,
-        sent: response.ok,
+        sent,
         payload,
         webhookStatus: response.status,
-        skippedReason: response.ok ? undefined : `Webhook returned HTTP ${response.status}`,
+        skippedReason: sent ? undefined : `Webhook returned HTTP ${response.status}`,
       });
 
-      if (response.ok) {
+      if (sent) {
         console.log(`Successfully sent webhook for ${doorName}.`);
         if (!force) {
-          await setAlertLatch(env, doorKey, {
-            openCreatedAt: state.createdAt,
-            lastAlertSentAt: new Date(nowMs).toISOString(),
-          });
+          try {
+            await setAlertLatch(env, doorKey, {
+              openCreatedAt: state.createdAt,
+              lastAlertSentAt: new Date(nowMs).toISOString(),
+            });
+          } catch (error) {
+            console.error('Webhook sent but latch persistence failed', error);
+          }
         }
       } else {
         console.error(`Failed to send webhook for ${doorName}. Status: ${response.status}`);

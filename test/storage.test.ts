@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { saveDoorState, getDoorState, getDoorHistory, claimMessageId } from '../src/storage';
+import {
+  saveDoorState,
+  getDoorState,
+  getDoorHistory,
+  beginMessageProcessing,
+  completeMessageProcessing,
+} from '../src/storage';
 import { Env } from '../src/types';
 import { createMockKv } from './mock-kv';
 
@@ -18,7 +24,7 @@ describe('storage KV tests', () => {
   });
 
   describe('saveDoorState', () => {
-    it('saves serialized JSON object and appends an event history key', async () => {
+    it('saves serialized JSON object and appends a reverse-chrono history key with TTL', async () => {
       await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
       expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
@@ -26,9 +32,14 @@ describe('storage KV tests', () => {
       expect(parsedState.value).toBe('OPEN');
       expect(parsedState.createdAt).toBeTruthy();
 
-      const eventKeys = [...store.keys()].filter((key) => key.startsWith('event:left-door:'));
+      const eventKeys = [...store.keys()].filter((key) => key.startsWith('eventr:left-door:'));
       expect(eventKeys.length).toBe(1);
       expect(JSON.parse(store.get(eventKeys[0]) || '').value).toBe('OPEN');
+
+      const historyPut = mockKV.put.mock.calls.find((call: unknown[]) =>
+        String(call[0]).startsWith('eventr:left-door:'),
+      );
+      expect(historyPut?.[2]).toEqual({ expirationTtl: 90 * 24 * 60 * 60 });
     });
 
     it('preserves createdAt across duplicate OPEN writes', async () => {
@@ -81,20 +92,52 @@ describe('storage KV tests', () => {
   });
 
   describe('getDoorHistory', () => {
-    it('returns append-only event history newest first', async () => {
+    it('lists reverse-chrono keys with limit 10 newest first', async () => {
+      const olderInv = String(
+        Number.MAX_SAFE_INTEGER - Date.parse('2023-01-01T00:00:01.000Z'),
+      ).padStart(16, '0');
+      const newerInv = String(
+        Number.MAX_SAFE_INTEGER - Date.parse('2023-01-01T00:00:02.000Z'),
+      ).padStart(16, '0');
       store.set(
-        'event:right-door:2023-01-01T00:00:02.000Z:a',
+        `eventr:right-door:${newerInv}:a`,
         JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:02.000Z' }),
       );
       store.set(
-        'event:right-door:2023-01-01T00:00:01.000Z:b',
+        `eventr:right-door:${olderInv}:b`,
         JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:01.000Z' }),
       );
 
       const result = await getDoorHistory(mockEnv, 'right-door');
+      expect(mockKV.list).toHaveBeenCalledWith({
+        prefix: 'eventr:right-door:',
+        limit: 10,
+      });
       expect(result.length).toBe(2);
       expect(result[0].value).toBe('CLOSED');
       expect(result[1].value).toBe('OPEN');
+    });
+
+    it('merges legacy ISO events and array until ten reverse-chrono events exist', async () => {
+      const inv = String(Number.MAX_SAFE_INTEGER - Date.parse('2024-06-01T00:00:00.000Z')).padStart(
+        16,
+        '0',
+      );
+      store.set(
+        `eventr:right-door:${inv}:new`,
+        JSON.stringify({ value: 'OPEN', createdAt: '2024-06-01T00:00:00.000Z' }),
+      );
+      store.set(
+        'event:right-door:2023-01-01T00:00:02.000Z:a',
+        JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:02.000Z' }),
+      );
+      store.set('history:right-door', JSON.stringify([{ value: 'UNKNOWN', createdAt: 'legacy' }]));
+
+      const result = await getDoorHistory(mockEnv, 'right-door');
+      expect(result.length).toBe(3);
+      expect(result[0].value).toBe('OPEN');
+      expect(result[1].value).toBe('CLOSED');
+      expect(result[2].value).toBe('UNKNOWN');
     });
 
     it('falls back to legacy history array when no events exist', async () => {
@@ -117,10 +160,33 @@ describe('storage KV tests', () => {
     });
   });
 
-  describe('claimMessageId', () => {
-    it('claims a Message-ID once and treats repeats as duplicates', async () => {
-      expect(await claimMessageId(mockEnv, '<abc@example.com>')).toBe(false);
-      expect(await claimMessageId(mockEnv, '<abc@example.com>')).toBe(true);
+  describe('message processing markers', () => {
+    it('skips duplicates after complete, and pending blocks in-flight retries', async () => {
+      expect(await beginMessageProcessing(mockEnv, '<abc@example.com>')).toBe(false);
+      expect(await beginMessageProcessing(mockEnv, '<abc@example.com>')).toBe(true);
+
+      await completeMessageProcessing(mockEnv, '<abc@example.com>');
+      expect(await beginMessageProcessing(mockEnv, '<abc@example.com>')).toBe(true);
+
+      const pendingKeys = [...store.keys()].filter((key) => key.startsWith('msgid:pending:'));
+      const doneKeys = [...store.keys()].filter((key) => key.startsWith('msgid:done:'));
+      expect(pendingKeys.length).toBe(0);
+      expect(doneKeys.length).toBe(1);
+      expect(doneKeys[0].length).toBeLessThan(100);
+    });
+
+    it('writes pending and done with expected TTLs', async () => {
+      await beginMessageProcessing(mockEnv, '<ttl@example.com>');
+      const pendingPut = mockKV.put.mock.calls.find((call: unknown[]) =>
+        String(call[0]).startsWith('msgid:pending:'),
+      );
+      expect(pendingPut?.[2]).toEqual({ expirationTtl: 5 * 60 });
+
+      await completeMessageProcessing(mockEnv, '<ttl@example.com>');
+      const donePut = mockKV.put.mock.calls.find((call: unknown[]) =>
+        String(call[0]).startsWith('msgid:done:'),
+      );
+      expect(donePut?.[2]).toEqual({ expirationTtl: 7 * 24 * 60 * 60 });
     });
   });
 });

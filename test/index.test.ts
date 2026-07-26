@@ -91,10 +91,11 @@ describe('myq-garage-worker integration tests', () => {
       await worker.email(message, mockEnv, {} as any);
 
       expect(mockKV.put).toHaveBeenCalledWith('garage-right', expect.any(String));
-      expect([...kvStore.keys()].some((key) => key.startsWith('event:garage-right:'))).toBe(true);
+      expect([...kvStore.keys()].some((key) => key.startsWith('eventr:garage-right:'))).toBe(true);
 
       const parsed = JSON.parse(kvStore.get('garage-right') || '');
       expect(parsed.value).toBe('OPEN');
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:done:'))).toBe(true);
     });
 
     it('skips duplicate Message-ID deliveries', async () => {

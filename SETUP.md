@@ -131,7 +131,7 @@ curl -i -H "Authorization: Bearer $API_KEY" \
 curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/"
 ```
 
-`GET /?json=true` stays behind the dashboard Access app because it is path `/`. Prefer `/devices` for Home Assistant.
+`GET /?json=true` remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
 
 The dashboard itself does not ask for an API key. Mutation routes used by the Simulator and Alerts tabs rely on Access (or being unreachable from the public internet).
 

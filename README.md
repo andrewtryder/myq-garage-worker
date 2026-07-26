@@ -31,6 +31,8 @@ This worker acts as two endpoints:
 
 For Home Assistant (HACS), create a **second** Access application whose public destination is `your-hostname/devices` with a Bypass (Everyone) policy. Worker-destination Access apps (one-click Workers Access) have no path field, so a Bypass on that app would unprotect the whole Worker. Cloudflare lets a more specific `public` destination take precedence. Set the Worker `API_KEY` secret — after the bypass, that key is the **only** guard on `/devices`. The integration sends `Authorization: Bearer YOUR_API_KEY`. Without `API_KEY`, `/devices` returns 401.
 
+Dashboard `POST /alert-config` and `POST /test-alert` include a soft Worker-side rate limit (UX only; fails open). For abuse prevention, configure Cloudflare Rate Limiting / WAF on those routes. See [SECURITY.md](SECURITY.md).
+
 ## Environment Variables / Configuration
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
@@ -202,7 +204,7 @@ The integration calls `GET /devices`, which returns:
 
 `id` is the stable KV key from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
 
-**Advanced / fallback:** `GET /?json=true` (requires `API_KEY`) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups. That query lives on path `/`, so it stays behind the dashboard Access app unless you create another path-scoped public-destination Access app for it. Prefer `GET /devices` for Home Assistant:
+**Advanced / fallback:** `GET /?json=true` (requires `API_KEY`) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups. `GET /?json=true` remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Use `/devices`, an Access service token, or a dedicated `/api/status` route instead. Prefer `GET /devices` for Home Assistant:
 
 ```json
 {

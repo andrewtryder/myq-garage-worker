@@ -1,20 +1,64 @@
 import { isDoorStatus } from './config';
 import { DoorState, DoorStatus, Env, AlertLatch } from './types';
 
-const HISTORY_PREFIX = 'event:';
+const HISTORY_REVERSE_PREFIX = 'eventr:';
+const HISTORY_LEGACY_PREFIX = 'event:';
 const HISTORY_LIMIT = 10;
-const MESSAGE_ID_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+/** 90-day retention for reverse-chrono history events. */
+const HISTORY_TTL_SECONDS = 90 * 24 * 60 * 60;
+const MESSAGE_ID_DONE_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const MESSAGE_ID_PENDING_TTL_SECONDS = 5 * 60; // 5 minutes
+
+function invertedTimestamp(iso: string): string {
+  const ms = Date.parse(iso);
+  const safeMs = Number.isFinite(ms) ? ms : Date.now();
+  return String(Number.MAX_SAFE_INTEGER - safeMs).padStart(16, '0');
+}
 
 function historyEventKey(doorKey: string, createdAt: string, id: string): string {
-  return `${HISTORY_PREFIX}${doorKey}:${createdAt}:${id}`;
+  return `${HISTORY_REVERSE_PREFIX}${doorKey}:${invertedTimestamp(createdAt)}:${id}`;
 }
 
 function alertLatchKey(doorKey: string): string {
   return `alert-latch:${doorKey}`;
 }
 
-function messageIdKey(messageId: string): string {
-  return `msgid:${messageId}`;
+function messageIdPendingKey(hash: string): string {
+  return `msgid:pending:${hash}`;
+}
+
+function messageIdDoneKey(hash: string): string {
+  return `msgid:done:${hash}`;
+}
+
+async function hashMessageId(normalized: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function parseDoorStateRaw(raw: string | null): DoorState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const value =
+      typeof parsed.value === 'string' && isDoorStatus(parsed.value) ? parsed.value : 'UNKNOWN';
+    return {
+      value,
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readHistoryFromKeys(env: Env, keys: string[]): Promise<DoorState[]> {
+  const values = await Promise.all(keys.map((key) => env.GARAGE_STATE.get(key)));
+  const events: DoorState[] = [];
+  for (const raw of values) {
+    const state = parseDoorStateRaw(raw);
+    if (state) events.push(state);
+  }
+  return events;
 }
 
 export async function saveDoorState(
@@ -45,11 +89,13 @@ export async function saveDoorState(
     }
   }
 
-  // Append-only history event (avoids lost updates from read-modify-write races).
+  // Append-only reverse-chrono history (newest keys first under lexicographic list).
   if (!(value === existing.value && createdAt === existing.createdAt)) {
     try {
       const id = crypto.randomUUID();
-      await env.GARAGE_STATE.put(historyEventKey(doorKey, now, id), JSON.stringify(newState));
+      await env.GARAGE_STATE.put(historyEventKey(doorKey, now, id), JSON.stringify(newState), {
+        expirationTtl: HISTORY_TTL_SECONDS,
+      });
     } catch (err) {
       console.error(`Failed to append state history for ${doorKey}:`, err);
     }
@@ -65,17 +111,7 @@ export async function getDoorState(env: Env, doorKey: string): Promise<DoorState
     if (!raw) {
       return { value: 'UNKNOWN', createdAt: '' };
     }
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === 'object' && parsed !== null) {
-      const state = parsed as Record<string, unknown>;
-      const value =
-        typeof state.value === 'string' && isDoorStatus(state.value) ? state.value : 'UNKNOWN';
-      return {
-        value,
-        createdAt: typeof state.createdAt === 'string' ? state.createdAt : '',
-      };
-    }
-    return { value: 'UNKNOWN', createdAt: '' };
+    return parseDoorStateRaw(raw) ?? { value: 'UNKNOWN', createdAt: '' };
   } catch (err) {
     console.error(`Error reading KV for ${doorKey}:`, err);
     return { value: 'UNKNOWN', createdAt: '' };
@@ -105,38 +141,42 @@ async function readLegacyHistoryArray(env: Env, doorKey: string): Promise<DoorSt
   }
 }
 
+async function readLegacyIsoEvents(env: Env, doorKey: string): Promise<DoorState[]> {
+  const listed = await env.GARAGE_STATE.list({ prefix: `${HISTORY_LEGACY_PREFIX}${doorKey}:` });
+  const keys = listed.keys
+    .map((entry) => entry.name)
+    .sort()
+    .reverse()
+    .slice(0, HISTORY_LIMIT);
+  return readHistoryFromKeys(env, keys);
+}
+
 export async function getDoorHistory(env: Env, doorKey: string): Promise<DoorState[]> {
   try {
-    const listed = await env.GARAGE_STATE.list({ prefix: `${HISTORY_PREFIX}${doorKey}:` });
-    const keys = listed.keys
-      .map((entry) => entry.name)
-      .sort()
-      .reverse()
-      .slice(0, HISTORY_LIMIT);
+    const listed = await env.GARAGE_STATE.list({
+      prefix: `${HISTORY_REVERSE_PREFIX}${doorKey}:`,
+      limit: HISTORY_LIMIT,
+    });
+    const modernKeys = listed.keys.map((entry) => entry.name);
+    const modern = await readHistoryFromKeys(env, modernKeys);
 
-    if (keys.length === 0) {
-      return readLegacyHistoryArray(env, doorKey);
+    if (modern.length >= HISTORY_LIMIT) {
+      return modern.slice(0, HISTORY_LIMIT);
     }
 
-    const values = await Promise.all(keys.map((key) => env.GARAGE_STATE.get(key)));
-    const events: DoorState[] = [];
+    const legacyIso = await readLegacyIsoEvents(env, doorKey);
+    const legacyArray = await readLegacyHistoryArray(env, doorKey);
 
-    for (const raw of values) {
-      if (!raw) continue;
-      try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        const value =
-          typeof parsed.value === 'string' && isDoorStatus(parsed.value) ? parsed.value : 'UNKNOWN';
-        events.push({
-          value,
-          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
-        });
-      } catch {
-        // skip malformed event
-      }
+    if (modern.length === 0 && legacyIso.length === 0) {
+      return legacyArray;
     }
 
-    return events;
+    const merged = [...modern];
+    for (const event of [...legacyIso, ...legacyArray]) {
+      if (merged.length >= HISTORY_LIMIT) break;
+      merged.push(event);
+    }
+    return merged;
   } catch (err) {
     console.error(`Error reading history KV for ${doorKey}:`, err);
     return readLegacyHistoryArray(env, doorKey);
@@ -164,16 +204,44 @@ export async function setAlertLatch(env: Env, doorKey: string, latch: AlertLatch
   await env.GARAGE_STATE.put(alertLatchKey(doorKey), JSON.stringify(latch));
 }
 
-/** Returns true if this Message-ID was already processed. */
-export async function claimMessageId(env: Env, messageId: string | null): Promise<boolean> {
+/**
+ * Begin processing a Message-ID. Returns true if this delivery should be skipped
+ * (already completed or currently in flight).
+ */
+export async function beginMessageProcessing(env: Env, messageId: string | null): Promise<boolean> {
   if (!messageId) return false;
   const normalized = messageId.trim();
   if (!normalized) return false;
 
-  const key = messageIdKey(normalized);
-  const existing = await env.GARAGE_STATE.get(key);
-  if (existing) return true;
+  const hash = await hashMessageId(normalized);
+  const doneKey = messageIdDoneKey(hash);
+  const pendingKey = messageIdPendingKey(hash);
 
-  await env.GARAGE_STATE.put(key, '1', { expirationTtl: MESSAGE_ID_TTL_SECONDS });
+  if (await env.GARAGE_STATE.get(doneKey)) return true;
+  if (await env.GARAGE_STATE.get(pendingKey)) return true;
+
+  await env.GARAGE_STATE.put(pendingKey, '1', {
+    expirationTtl: MESSAGE_ID_PENDING_TTL_SECONDS,
+  });
   return false;
+}
+
+/** Mark a Message-ID as successfully processed after state is saved. */
+export async function completeMessageProcessing(env: Env, messageId: string | null): Promise<void> {
+  if (!messageId) return;
+  const normalized = messageId.trim();
+  if (!normalized) return;
+
+  const hash = await hashMessageId(normalized);
+  const doneKey = messageIdDoneKey(hash);
+  const pendingKey = messageIdPendingKey(hash);
+
+  await env.GARAGE_STATE.put(doneKey, '1', {
+    expirationTtl: MESSAGE_ID_DONE_TTL_SECONDS,
+  });
+  try {
+    await env.GARAGE_STATE.delete(pendingKey);
+  } catch (err) {
+    console.error('Failed to clear pending Message-ID marker:', err);
+  }
 }

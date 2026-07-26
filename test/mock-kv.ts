@@ -11,10 +11,14 @@ export function createMockKv(store = new Map<string, string>()) {
       store.delete(key);
       return Promise.resolve();
     }),
-    list: vi.fn(({ prefix }: { prefix?: string } = {}) => {
-      const keys = [...store.keys()]
+    list: vi.fn(({ prefix, limit }: { prefix?: string; limit?: number } = {}) => {
+      let keys = [...store.keys()]
         .filter((key) => (prefix ? key.startsWith(prefix) : true))
+        .sort()
         .map((name) => ({ name }));
+      if (typeof limit === 'number') {
+        keys = keys.slice(0, limit);
+      }
       return Promise.resolve({ keys, list_complete: true, cacheStatus: null });
     }),
   };

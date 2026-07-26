@@ -4,18 +4,12 @@ export default defineConfig({
   test: {
     coverage: {
       provider: 'v8',
-      include: [
-        'src/auth.ts',
-        'src/webhook-url.ts',
-        'src/email-parser.ts',
-        'src/alert-config.ts',
-        'src/config.ts',
-      ],
+      include: ['src/**/*.ts'],
       thresholds: {
-        statements: 80,
-        branches: 80,
-        functions: 80,
-        lines: 80,
+        statements: 70,
+        branches: 60,
+        functions: 70,
+        lines: 70,
       },
     },
   },

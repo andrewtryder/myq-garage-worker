@@ -258,4 +258,38 @@ describe('alerts', () => {
     });
     expect(afterReopen[0].sent).toBe(true);
   });
+
+  it('reports webhook success even when latch persistence fails', async () => {
+    const { mockKV } = createMockKv(
+      new Map([
+        [
+          'garage-left',
+          JSON.stringify({
+            value: 'OPEN',
+            createdAt: '2020-01-01T00:00:00.000Z',
+          }),
+        ],
+      ]),
+    );
+    mockKV.put.mockImplementation((key: string, _value: string) => {
+      if (key.startsWith('alert-latch:')) {
+        return Promise.reject(new Error('kv write failed'));
+      }
+      return Promise.resolve();
+    });
+
+    const env: any = {
+      GARAGE_STATE: mockKV,
+      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+    };
+
+    const results = await runOpenDoorAlerts(env, {
+      config: sampleConfig,
+      nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].sent).toBe(true);
+    expect(results[0].error).toBeUndefined();
+  });
 });

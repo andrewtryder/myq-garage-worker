@@ -64,6 +64,9 @@ function printExistingConfigSummary(existingConfig) {
   }
 
   console.log(`  API_KEY (Home Assistant): ${existingConfig.hasApiKey ? 'configured' : 'not set'}`);
+  console.log(
+    `  ALLOWED_EMAIL_TO (inbound recipient): ${existingConfig.hasAllowedEmailTo ? 'configured' : 'not set'}`,
+  );
 
   if (existingConfig.garageDoors) {
     console.log(`  GARAGE_DOORS: ${JSON.stringify(existingConfig.garageDoors)}`);
@@ -204,6 +207,31 @@ async function configureApiKey(existingConfig, mode) {
   return question('Enter your Home Assistant API key: ');
 }
 
+async function configureAllowedEmailTo(existingConfig, mode) {
+  console.log('\n--- Allowed Email Recipient (recommended) ---');
+  console.log(
+    'Set ALLOWED_EMAIL_TO to your Email Routing address so only that envelope RCPT TO is accepted.',
+  );
+
+  if (existingConfig.hasAllowedEmailTo && mode !== 'fresh') {
+    const update = await question('ALLOWED_EMAIL_TO is already configured. Update it? (y/N): ');
+    if (update.toLowerCase() !== 'y') {
+      return '';
+    }
+    return question('Enter the exact inbound email address (RCPT TO): ');
+  }
+
+  const want = await question('Set ALLOWED_EMAIL_TO now? (Y/n): ');
+  if (want.toLowerCase() === 'n') {
+    console.log(
+      '⚠️ Skipping ALLOWED_EMAIL_TO. Set it later with: npx wrangler secret put ALLOWED_EMAIL_TO',
+    );
+    return '';
+  }
+
+  return question('Enter the exact inbound email address (RCPT TO): ');
+}
+
 async function configureKvNamespace(existingConfig, mode, wranglerPath) {
   console.log('\n--- KV Namespace Setup ---');
 
@@ -257,7 +285,7 @@ async function configureKvNamespace(existingConfig, mode, wranglerPath) {
   );
 }
 
-async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
+async function deployWorker(doorsJson, apiKey, allowedEmailTo, workerName, existingSecrets) {
   console.log('\n--- Deployment ---');
   const doDeploy = await question('Ready to deploy to Cloudflare? (Y/n): ');
   if (doDeploy.toLowerCase() === 'n') {
@@ -297,6 +325,16 @@ async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
     );
   }
 
+  if (allowedEmailTo) {
+    console.log('\n🔒 Setting ALLOWED_EMAIL_TO secret...');
+    console.log('You will be prompted to enter the address one more time for Cloudflare Secrets.');
+    await runCommand(
+      'npx',
+      ['wrangler', 'secret', 'put', 'ALLOWED_EMAIL_TO'],
+      'Failed to set ALLOWED_EMAIL_TO secret.',
+    );
+  }
+
   console.log('\n================================================');
   console.log('🎉 Setup Complete!');
   console.log('Your myQ Garage Worker is deployed.');
@@ -310,8 +348,11 @@ async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
   console.log('3. Set up Email Routing in Cloudflare to forward to this worker.');
   console.log('4. Set up your myQ app to send email notifications.');
   console.log('See SETUP.md and README.md for details.');
-  if (hadExistingApiKey && !apiKey) {
+  if (existingSecrets.hasApiKey && !apiKey) {
     console.log('\n(Existing API_KEY secret was left unchanged.)');
+  }
+  if (existingSecrets.hasAllowedEmailTo && !allowedEmailTo) {
+    console.log('(Existing ALLOWED_EMAIL_TO secret was left unchanged.)');
   }
   console.log('================================================\n');
 }
@@ -341,8 +382,12 @@ async function setup() {
   console.log(`\nYour configuration: ${doorsJson}`);
 
   const apiKey = await configureApiKey(existingConfig, mode);
+  const allowedEmailTo = await configureAllowedEmailTo(existingConfig, mode);
   await configureKvNamespace(existingConfig, mode, wranglerPath);
-  await deployWorker(doorsJson, apiKey, existingConfig.workerName, existingConfig.hasApiKey);
+  await deployWorker(doorsJson, apiKey, allowedEmailTo, existingConfig.workerName, {
+    hasApiKey: existingConfig.hasApiKey,
+    hasAllowedEmailTo: existingConfig.hasAllowedEmailTo,
+  });
 
   rl.close();
 }
