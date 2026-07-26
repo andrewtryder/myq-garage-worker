@@ -1,6 +1,7 @@
 /* global process */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadDotEnv } from './setup-config.js';
@@ -51,6 +52,29 @@ export function removeInjectedGarageDoors(wranglerPath) {
   fs.writeFileSync(wranglerPath, content);
 }
 
+/**
+ * Copy wrangler.jsonc to a temp file, inject deploy vars, and return the temp path.
+ * Avoids mutating the tracked config in CI or local deploys.
+ */
+export function writeDeployConfig(options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const sourcePath = options.sourcePath ?? path.join(cwd, 'wrangler.jsonc');
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`wrangler config not found: ${sourcePath}`);
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'myq-wrangler-'));
+  const tmpPath = path.join(tmpDir, 'wrangler.jsonc');
+  fs.copyFileSync(sourcePath, tmpPath);
+
+  injectDeployVars(tmpPath, {
+    kvNamespaceId: options.kvNamespaceId ?? process.env.KV_NAMESPACE_ID,
+    garageDoors: options.garageDoors ?? process.env.GARAGE_DOORS,
+  });
+
+  return tmpPath;
+}
+
 export function runWranglerDeploy(args, { env = process.env, inherit = true } = {}) {
   const result = spawnSync('npx', ['wrangler', ...args], {
     stdio: inherit ? 'inherit' : 'pipe',
@@ -70,13 +94,15 @@ function readPackageVersion(cwd = process.cwd()) {
   return pkg.version;
 }
 
+function appendGithubOutput(key, value) {
+  if (!process.env.GITHUB_OUTPUT) return;
+  fs.appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+}
+
 export function deployWorker(options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  const wranglerPath = path.join(cwd, 'wrangler.jsonc');
-
-  loadDotEnv(cwd);
-
-  injectDeployVars(wranglerPath, {
+  const configPath = writeDeployConfig({
+    cwd,
     kvNamespaceId: options.kvNamespaceId ?? process.env.KV_NAMESPACE_ID,
     garageDoors: options.garageDoors ?? process.env.GARAGE_DOORS,
   });
@@ -86,6 +112,8 @@ export function deployWorker(options = {}) {
   const args = [
     'deploy',
     '--minify',
+    '--config',
+    configPath,
     '--tag',
     `v${version}`,
     '--message',
@@ -97,25 +125,20 @@ export function deployWorker(options = {}) {
     args.push('--dry-run');
   }
 
-  try {
-    runWranglerDeploy(args, { env: process.env, inherit: options.inherit ?? true });
-  } finally {
-    if (options.cleanupGarageDoors !== false) {
-      removeInjectedGarageDoors(wranglerPath);
-    }
-  }
+  runWranglerDeploy(args, { env: process.env, inherit: options.inherit ?? true });
+  return configPath;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
+  const writeConfig = process.argv.includes('--write-config');
   const injectOnly = process.argv.includes('--inject-only');
   loadDotEnv();
 
-  if (injectOnly) {
-    injectDeployVars(path.join(process.cwd(), 'wrangler.jsonc'), {
-      kvNamespaceId: process.env.KV_NAMESPACE_ID,
-      garageDoors: process.env.GARAGE_DOORS,
-    });
+  if (writeConfig || injectOnly) {
+    const configPath = writeDeployConfig();
+    console.log(configPath);
+    appendGithubOutput('wrangler_config', configPath);
   } else {
     deployWorker({ dryRun });
   }

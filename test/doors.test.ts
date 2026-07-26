@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildHaDevices, mapHaDeviceStatus, routeRequiresAuth } from '../src/doors';
-import { Env } from '../src/types';
+import { buildHaDevices, mapHaDeviceStatus } from '../src/doors';
+import { routeRequiresApiKey } from '../src/auth';
 
 describe('doors helpers', () => {
   describe('mapHaDeviceStatus', () => {
@@ -37,38 +37,29 @@ describe('doors helpers', () => {
     });
   });
 
-  describe('routeRequiresAuth', () => {
-    const env = { API_KEY: 'secret' } as Env;
-
-    it('requires auth for HTML dashboard at /', () => {
-      expect(routeRequiresAuth(new Request('https://worker.dev/'), env)).toBe(true);
+  describe('routeRequiresApiKey', () => {
+    it('requires API key only for machine status endpoints', () => {
+      expect(routeRequiresApiKey(new Request('https://worker.dev/devices'))).toBe(true);
+      expect(routeRequiresApiKey(new Request('https://worker.dev/?json=true'))).toBe(true);
     });
 
-    it('requires auth for /devices, ?json=true, POST /simulate, /alert-config, and /test-alert', () => {
-      expect(routeRequiresAuth(new Request('https://worker.dev/devices'), env)).toBe(true);
-      expect(routeRequiresAuth(new Request('https://worker.dev/?json=true'), env)).toBe(true);
+    it('does not require API key for browser dashboard or mutation routes', () => {
+      expect(routeRequiresApiKey(new Request('https://worker.dev/'))).toBe(false);
       expect(
-        routeRequiresAuth(
+        routeRequiresApiKey(
           new Request('https://worker.dev/simulate', { method: 'POST', body: '{}' }),
-          env,
         ),
-      ).toBe(true);
+      ).toBe(false);
       expect(
-        routeRequiresAuth(
+        routeRequiresApiKey(
           new Request('https://worker.dev/alert-config', { method: 'POST', body: '{}' }),
-          env,
         ),
-      ).toBe(true);
+      ).toBe(false);
       expect(
-        routeRequiresAuth(
+        routeRequiresApiKey(
           new Request('https://worker.dev/test-alert', { method: 'POST', body: '{}' }),
-          env,
         ),
-      ).toBe(true);
-    });
-
-    it('does not require auth when API_KEY is unset', () => {
-      expect(routeRequiresAuth(new Request('https://worker.dev/devices'), {} as Env)).toBe(false);
+      ).toBe(false);
     });
   });
 });

@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { saveDoorState, getDoorState, getDoorHistory } from '../src/storage';
-import { Env, DoorState } from '../src/types';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { saveDoorState, getDoorState, getDoorHistory, claimMessageId } from '../src/storage';
+import { Env } from '../src/types';
+import { createMockKv } from './mock-kv';
 
 describe('storage KV tests', () => {
   let mockKV: any;
@@ -9,15 +10,7 @@ describe('storage KV tests', () => {
   let mockEnv: Env;
 
   beforeEach(() => {
-    store = new Map();
-    mockKV = {
-      get: vi.fn((key: string) => Promise.resolve(store.get(key) || null)),
-      put: vi.fn((key: string, value: string) => {
-        store.set(key, value);
-        return Promise.resolve();
-      }),
-    };
-
+    ({ store, mockKV } = createMockKv());
     mockEnv = {
       GARAGE_STATE: mockKV,
       GARAGE_DOORS: {},
@@ -25,37 +18,40 @@ describe('storage KV tests', () => {
   });
 
   describe('saveDoorState', () => {
-    it('saves serialized JSON object and appends to history', async () => {
+    it('saves serialized JSON object and appends an event history key', async () => {
       await saveDoorState(mockEnv, 'left-door', 'OPEN');
 
-      // Check current state write
       expect(mockKV.put).toHaveBeenCalledWith('left-door', expect.any(String));
       const parsedState = JSON.parse(store.get('left-door') || '');
       expect(parsedState.value).toBe('OPEN');
       expect(parsedState.createdAt).toBeTruthy();
 
-      expect(mockKV.put).toHaveBeenCalledWith('history:left-door', expect.any(String));
-      const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
-      expect(parsedHistory.length).toBe(1);
-      expect(parsedHistory[0].value).toBe('OPEN');
+      const eventKeys = [...store.keys()].filter((key) => key.startsWith('event:left-door:'));
+      expect(eventKeys.length).toBe(1);
+      expect(JSON.parse(store.get(eventKeys[0]) || '').value).toBe('OPEN');
     });
 
-    it('caps history array to 10 entries', async () => {
-      const initialHistory: DoorState[] = Array(10)
-        .fill(null)
-        .map((_, i) => ({
-          value: 'CLOSED',
-          createdAt: `2023-01-01T00:00:${i.toString().padStart(2, '0')}.000Z`,
-        }));
-
-      store.set('history:left-door', JSON.stringify(initialHistory));
+    it('preserves createdAt across duplicate OPEN writes', async () => {
+      await saveDoorState(mockEnv, 'left-door', 'OPEN');
+      const first = JSON.parse(store.get('left-door') || '');
 
       await saveDoorState(mockEnv, 'left-door', 'OPEN');
+      const second = JSON.parse(store.get('left-door') || '');
 
-      const parsedHistory = JSON.parse(store.get('history:left-door') || '[]');
-      expect(parsedHistory.length).toBe(10);
-      // Ensure the newest entry is at the top
-      expect(parsedHistory[0].value).toBe('OPEN');
+      expect(second.createdAt).toBe(first.createdAt);
+    });
+
+    it('clears alert latch when door closes', async () => {
+      store.set(
+        'alert-latch:left-door',
+        JSON.stringify({
+          openCreatedAt: '2023-01-01T00:00:00.000Z',
+          lastAlertSentAt: '2023-01-01T01:00:00.000Z',
+        }),
+      );
+
+      await saveDoorState(mockEnv, 'left-door', 'CLOSED');
+      expect(store.has('alert-latch:left-door')).toBe(false);
     });
   });
 
@@ -85,12 +81,30 @@ describe('storage KV tests', () => {
   });
 
   describe('getDoorHistory', () => {
-    it('returns parsed history array', async () => {
-      const rawHistory = JSON.stringify([
-        { value: 'OPEN', createdAt: '1' },
-        { value: 'CLOSED', createdAt: '2' },
-      ]);
-      store.set('history:right-door', rawHistory);
+    it('returns append-only event history newest first', async () => {
+      store.set(
+        'event:right-door:2023-01-01T00:00:02.000Z:a',
+        JSON.stringify({ value: 'CLOSED', createdAt: '2023-01-01T00:00:02.000Z' }),
+      );
+      store.set(
+        'event:right-door:2023-01-01T00:00:01.000Z:b',
+        JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:01.000Z' }),
+      );
+
+      const result = await getDoorHistory(mockEnv, 'right-door');
+      expect(result.length).toBe(2);
+      expect(result[0].value).toBe('CLOSED');
+      expect(result[1].value).toBe('OPEN');
+    });
+
+    it('falls back to legacy history array when no events exist', async () => {
+      store.set(
+        'history:right-door',
+        JSON.stringify([
+          { value: 'OPEN', createdAt: '1' },
+          { value: 'CLOSED', createdAt: '2' },
+        ]),
+      );
 
       const result = await getDoorHistory(mockEnv, 'right-door');
       expect(result.length).toBe(2);
@@ -100,6 +114,13 @@ describe('storage KV tests', () => {
     it('returns empty array if missing', async () => {
       const result = await getDoorHistory(mockEnv, 'missing-door');
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('claimMessageId', () => {
+    it('claims a Message-ID once and treats repeats as duplicates', async () => {
+      expect(await claimMessageId(mockEnv, '<abc@example.com>')).toBe(false);
+      expect(await claimMessageId(mockEnv, '<abc@example.com>')).toBe(true);
     });
   });
 });

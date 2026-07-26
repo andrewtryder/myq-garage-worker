@@ -1,5 +1,5 @@
 /* global process */
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import readline from 'readline';
 import path from 'path';
 import {
@@ -19,10 +19,13 @@ const rl = readline.createInterface({
 
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 
-async function runCommand(command, errorMessage) {
+async function runCommand(command, args, errorMessage) {
   try {
-    console.log(`\nExecuting: ${command}`);
-    execSync(command, { stdio: 'inherit' });
+    console.log(`\nExecuting: ${command} ${args.join(' ')}`);
+    const result = spawnSync(command, args, { stdio: 'inherit', encoding: 'utf-8' });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || errorMessage);
+    }
   } catch (error) {
     console.error(`\n❌ Error: ${errorMessage}`);
     console.error(error.message);
@@ -30,10 +33,14 @@ async function runCommand(command, errorMessage) {
   }
 }
 
-async function runCommandWithOutput(command, errorMessage) {
+async function runCommandWithOutput(command, args, errorMessage) {
   try {
-    console.log(`\nExecuting: ${command}`);
-    return execSync(command, { encoding: 'utf-8' });
+    console.log(`\nExecuting: ${command} ${args.join(' ')}`);
+    const result = spawnSync(command, args, { encoding: 'utf-8' });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || errorMessage);
+    }
+    return result.stdout;
   } catch (error) {
     console.error(`\n❌ Error: ${errorMessage}`);
     console.error(error.message);
@@ -56,7 +63,7 @@ function printExistingConfigSummary(existingConfig) {
     console.log('  KV namespace: not configured in wrangler.jsonc');
   }
 
-  console.log(`  API_KEY: ${existingConfig.hasApiKey ? 'configured' : 'not set'}`);
+  console.log(`  API_KEY (Home Assistant): ${existingConfig.hasApiKey ? 'configured' : 'not set'}`);
 
   if (existingConfig.garageDoors) {
     console.log(`  GARAGE_DOORS: ${JSON.stringify(existingConfig.garageDoors)}`);
@@ -172,8 +179,13 @@ async function configureGarageDoors(existingConfig, mode) {
 }
 
 async function configureApiKey(existingConfig, mode) {
-  console.log('\n--- Optional API Key ---');
-  console.log('You can protect your dashboard with an API key (highly recommended).');
+  console.log('\n--- Home Assistant API Key (optional) ---');
+  console.log(
+    'Browser dashboard access should be protected with Cloudflare Zero Trust / Access (your responsibility).',
+  );
+  console.log(
+    'Set API_KEY only if you use Home Assistant (ha-myq-garage) — it authenticates GET /devices with Bearer.',
+  );
 
   if (existingConfig.hasApiKey && mode !== 'fresh') {
     const update = await question('API_KEY is already configured. Update it? (y/N): ');
@@ -181,15 +193,15 @@ async function configureApiKey(existingConfig, mode) {
       return '';
     }
 
-    return question('Enter your new secret API key: ');
+    return question('Enter your new Home Assistant API key: ');
   }
 
-  const wantApiKey = await question('Would you like to set an API key? (Y/n): ');
-  if (wantApiKey.toLowerCase() === 'n') {
+  const wantApiKey = await question('Set API_KEY for Home Assistant? (y/N): ');
+  if (wantApiKey.toLowerCase() !== 'y') {
     return '';
   }
 
-  return question('Enter your secret API key: ');
+  return question('Enter your Home Assistant API key: ');
 }
 
 async function configureKvNamespace(existingConfig, mode, wranglerPath) {
@@ -221,7 +233,8 @@ async function configureKvNamespace(existingConfig, mode, wranglerPath) {
   }
 
   const output = await runCommandWithOutput(
-    'npx wrangler kv:namespace create GARAGE_STATE',
+    'npx',
+    ['wrangler', 'kv', 'namespace', 'create', 'GARAGE_STATE'],
     'Failed to create KV namespace.',
   );
 
@@ -275,30 +288,31 @@ async function deployWorker(doorsJson, apiKey, workerName, hadExistingApiKey) {
   }
 
   if (apiKey) {
-    console.log('\n🔒 Setting API_KEY secret...');
-    console.log('You will be prompted to enter your API key one more time for Cloudflare Secrets.');
-    await runCommand('npx wrangler secret put API_KEY', 'Failed to set API_KEY secret.');
+    console.log('\n🔒 Setting API_KEY secret for Home Assistant...');
+    console.log('You will be prompted to enter the key one more time for Cloudflare Secrets.');
+    await runCommand(
+      'npx',
+      ['wrangler', 'secret', 'put', 'API_KEY'],
+      'Failed to set API_KEY secret.',
+    );
   }
 
   console.log('\n================================================');
   console.log('🎉 Setup Complete!');
   console.log('Your myQ Garage Worker is deployed.');
   const workerHost = workerName ?? 'myq-garage-worker';
-  if (apiKey) {
-    console.log(
-      `\nAccess your dashboard at: https://${workerHost}.<YOUR_SUBDOMAIN>.workers.dev/?key=${apiKey}`,
-    );
-  } else if (hadExistingApiKey) {
-    console.log(
-      `\nAccess your dashboard at: https://${workerHost}.<YOUR_SUBDOMAIN>.workers.dev/?key=YOUR_API_KEY`,
-    );
-  } else {
-    console.log(`\nAccess your dashboard at: https://${workerHost}.<YOUR_SUBDOMAIN>.workers.dev`);
-  }
+  console.log(`\nDashboard URL: https://${workerHost}.<YOUR_SUBDOMAIN>.workers.dev`);
   console.log('\nNext steps:');
-  console.log('1. Set up Email Routing in Cloudflare to forward to this worker.');
-  console.log('2. Set up your myQ app to send email notifications.');
-  console.log('See SETUP.md for details.');
+  console.log(
+    '1. Put the dashboard behind Cloudflare Zero Trust / Access (operator responsibility).',
+  );
+  console.log('2. If using Home Assistant, Bypass Access for /devices and set API_KEY.');
+  console.log('3. Set up Email Routing in Cloudflare to forward to this worker.');
+  console.log('4. Set up your myQ app to send email notifications.');
+  console.log('See SETUP.md and README.md for details.');
+  if (hadExistingApiKey && !apiKey) {
+    console.log('\n(Existing API_KEY secret was left unchanged.)');
+  }
   console.log('================================================\n');
 }
 

@@ -25,18 +25,21 @@ This worker acts as two endpoints:
 - **Codebase**: TypeScript, ESLint, Prettier
 - **Storage**: [Cloudflare KV](https://developers.cloudflare.com/kv/)
 
-## Security Recommendation
+## Security (operator responsibility)
 
-If you are using this worker for personal use, set `API_KEY` to protect the dashboard and API routes. The browser unlock page accepts your key once per session (or use a bookmark like `https://your-worker.workers.dev/?key=YOUR_KEY`). Home Assistant and other API clients should send `Authorization: Bearer YOUR_API_KEY`. For stronger access control, put the worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/).
+**Browser dashboard access is not enforced inside this Worker.** Put the Worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/) with an Allow policy for humans. If Access is missing or misconfigured, anyone who knows the URL can view the dashboard and call Simulator/Alerts endpoints.
+
+For Home Assistant (HACS), create a **second** Access application whose public destination is `your-hostname/devices` with a Bypass (Everyone) policy. Worker-destination Access apps (one-click Workers Access) have no path field, so a Bypass on that app would unprotect the whole Worker. Cloudflare lets a more specific `public` destination take precedence. Set the Worker `API_KEY` secret — after the bypass, that key is the **only** guard on `/devices`. The integration sends `Authorization: Bearer YOUR_API_KEY`. Without `API_KEY`, `/devices` returns 401.
 
 ## Environment Variables / Configuration
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
-| Variable Name  | Description                                                                                                                                                                                                                            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS` | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                                                              |
-| `API_KEY`      | _(Optional)_ Secret key protecting the dashboard (`GET /`), API routes (`GET /devices`, `GET /?json=true`, `POST /simulate`, `POST /alert-config`, `POST /test-alert`). Auth accepts `?key=`, `Authorization: Bearer`, or `x-api-key`. |
+| Variable Name      | Description                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                  |
+| `API_KEY`          | Secret required for machine status APIs (`GET /devices`, `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard (use Access). |
+| `ALLOWED_EMAIL_TO` | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                     |
 
 **Example configuration:**
 
@@ -86,30 +89,30 @@ To ensure your dashboard UI updates correctly without having to open/close your 
 
 ### Option 1: Web UI Simulator
 
-Open your deployed worker URL in a browser. When `API_KEY` is set, enter your key on the unlock page (or bookmark `/?key=YOUR_KEY`). Switch to the **Simulator** tab, choose a configured door from the dropdown, and pick an action (opened, closed, stopped).
+Open your Access-protected worker URL in a browser. Switch to the **Simulator** tab, choose a configured door from the dropdown, and pick an action (opened, closed, stopped).
 
 ### Option 2: Alerts tab
 
 Switch to the **Alerts** tab to configure a left-open webhook (stored in KV, used by the cron job every 15 minutes):
 
-- **Webhook URL** — your ntfy, Pushover, Apprise, or other endpoint (use a secret topic URL)
+- **Webhook URL** — HTTPS only (ntfy, Pushover, Apprise, etc.; use a secret topic URL). Private/localhost destinations are rejected.
 - **Threshold (minutes)** — how long a door must be open before alerting
 - **HTTP method** — `POST` sends a JSON body; `GET` appends `title`, `message`, and other fields as query params (handy for ntfy.sh)
 - **Save** — persists settings for the scheduled cron job
 - **Test webhook** — sends a test notification immediately using the form values
 
-Both **Save** and **Test webhook** call protected endpoints (`POST /alert-config`, `POST /test-alert`) and use the same session auth as the Simulator tab when `API_KEY` is set.
+Alerts fire once when the threshold is crossed for an open session (optional reminder interval can be configured via API). Closing the door clears the latch.
 
 ### Option 3: CLI Script
 
 You can use the included CLI script from your terminal to ping the live (or local) worker:
 
 ```bash
-# node scripts/test-live.js <URL> <DOOR_NAME> <ACTION> [API_KEY]
+# node scripts/test-live.js <URL> <DOOR_NAME> <ACTION>
 node scripts/test-live.js https://my-worker.workers.dev "Garage Door Left" opened
 ```
 
-Both simulator options talk to dedicated endpoints (`POST /simulate` for door state, `POST /alert-config` / `POST /test-alert` for webhooks) which bypass the strict email "From:" address validations but execute the same parsing and storage/alert logic as production.
+Simulator and alert endpoints bypass the inbound email envelope-sender check but execute the same storage/alert logic as production.
 
 ## Formatting & Linting
 
@@ -147,7 +150,7 @@ The worker checks every 15 minutes (via Cloudflare Cron Triggers) for doors left
 1. Open the dashboard **Alerts** tab and configure your webhook URL, threshold, and HTTP method, then click **Save**.
 2. Ensure you have the `[triggers]` configuration in `wrangler.jsonc` to fire the cron job.
 
-Alert settings are stored in KV (not environment variables). When `API_KEY` is set, saving and testing alerts requires the same authentication as the rest of the dashboard.
+Alert settings are stored in KV (not environment variables). Protect the dashboard with Cloudflare Access so only you can change webhook settings.
 
 **POST** sends a JSON body:
 
@@ -176,14 +179,15 @@ If you host an [Apprise API](https://github.com/caronc/apprise-api) container, y
 
 For Home Assistant, use the companion **[ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage)** custom integration (available via HACS). It polls `GET /devices` on this worker and creates cover entities with config-flow setup.
 
-**Browser dashboard:** when `API_KEY` is set, open `https://your-worker.workers.dev/` and enter your key on the unlock page, or bookmark `https://your-worker.workers.dev/?key=YOUR_KEY`.
+**Browser dashboard:** protect the Worker with Cloudflare Access (Allow policy). Do not rely on an in-app unlock page.
 
 **Home Assistant setup:**
 
 1. Deploy this worker with `GARAGE_DOORS` configured at deploy time (via `npm run setup` or CI). Without it, `/devices` returns an empty array.
-2. Set the `API_KEY` secret on the worker.
-3. Install [ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage) via HACS.
-4. Add the integration in Home Assistant (**Settings → Devices & Services → Add Integration → MyQ Garage**):
+2. Set a strong `API_KEY` secret on the worker (required for `/devices`; this is the sole auth after Access bypass).
+3. Create a second Access application for `your-hostname/devices` with Bypass (Everyone). See [SETUP.md](SETUP.md) for the API recipe. Do **not** add Bypass to the Worker-destination Access app.
+4. Install [ha-myq-garage](https://github.com/andrewtryder/ha-myq-garage) via HACS.
+5. Add the integration in Home Assistant (**Settings → Devices & Services → Add Integration → MyQ Garage**):
    - **API URL:** `https://your-worker.workers.dev`
    - **API key:** your `API_KEY` value (sent as `Authorization: Bearer …`)
 
@@ -198,7 +202,7 @@ The integration calls `GET /devices`, which returns:
 
 `id` is the stable KV key from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
 
-**Advanced / fallback:** `GET /?json=true` (requires `API_KEY` when set) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups:
+**Advanced / fallback:** `GET /?json=true` (requires `API_KEY`) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups. That query lives on path `/`, so it stays behind the dashboard Access app unless you create another path-scoped public-destination Access app for it. Prefer `GET /devices` for Home Assistant:
 
 ```json
 {

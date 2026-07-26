@@ -29,5 +29,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# generated
+worker-configuration.d.ts
+coverage/
+
 # misc
 .DS_Store

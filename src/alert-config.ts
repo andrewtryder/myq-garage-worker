@@ -1,4 +1,5 @@
 import { Env } from './types';
+import { assertSafeWebhookUrl, redactWebhookUrl } from './webhook-url';
 
 export const ALERT_CONFIG_KEY = 'config:alerts';
 
@@ -6,6 +7,25 @@ export interface AlertConfig {
   webhookUrl: string;
   thresholdMinutes: number;
   method: 'GET' | 'POST';
+  /** Minutes between reminder alerts after the first; omit or 0 for once-only. */
+  reminderMinutes?: number;
+}
+
+export interface PublicAlertConfig {
+  webhookUrl: string;
+  thresholdMinutes: number;
+  method: 'GET' | 'POST';
+  reminderMinutes?: number;
+}
+
+export function toPublicAlertConfig(config: AlertConfig | null): PublicAlertConfig | null {
+  if (!config) return null;
+  return {
+    webhookUrl: redactWebhookUrl(config.webhookUrl),
+    thresholdMinutes: config.thresholdMinutes,
+    method: config.method,
+    reminderMinutes: config.reminderMinutes,
+  };
 }
 
 export function validateAlertConfig(input: unknown): AlertConfig | null {
@@ -19,16 +39,25 @@ export function validateAlertConfig(input: unknown): AlertConfig | null {
       : parseInt(String(record.thresholdMinutes ?? ''), 10);
   const method = record.method === 'GET' || record.method === 'POST' ? record.method : null;
 
-  if (!webhookUrl) return null;
-
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(webhookUrl);
-  } catch {
-    return null;
+  let reminderMinutes: number | undefined;
+  if (
+    record.reminderMinutes !== undefined &&
+    record.reminderMinutes !== null &&
+    record.reminderMinutes !== ''
+  ) {
+    reminderMinutes =
+      typeof record.reminderMinutes === 'number'
+        ? record.reminderMinutes
+        : parseInt(String(record.reminderMinutes), 10);
+    if (isNaN(reminderMinutes) || reminderMinutes < 0) return null;
+    if (reminderMinutes === 0) reminderMinutes = undefined;
   }
 
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+  if (!webhookUrl) return null;
+
+  try {
+    assertSafeWebhookUrl(webhookUrl);
+  } catch {
     return null;
   }
 
@@ -39,6 +68,7 @@ export function validateAlertConfig(input: unknown): AlertConfig | null {
     webhookUrl,
     thresholdMinutes,
     method,
+    reminderMinutes,
   };
 }
 
@@ -67,9 +97,11 @@ export function resolveAlertConfigFromBody(
   body: Record<string, unknown>,
   saved: AlertConfig | null,
 ): AlertConfig | null {
+  const bodyUrl = typeof body.webhookUrl === 'string' ? body.webhookUrl.trim() : '';
   return validateAlertConfig({
-    webhookUrl: body.webhookUrl ?? saved?.webhookUrl,
+    webhookUrl: bodyUrl || saved?.webhookUrl,
     thresholdMinutes: body.thresholdMinutes ?? saved?.thresholdMinutes ?? 60,
     method: body.method ?? saved?.method ?? 'POST',
+    reminderMinutes: body.reminderMinutes ?? saved?.reminderMinutes,
   });
 }

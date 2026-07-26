@@ -5,46 +5,93 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  HUSKY: '0'
+
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
-    name: Deploy
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 15
+    name: Validate
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Get Version and Commit Message
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --dry-run --outdir dist
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: Deploy
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get version
         id: info
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          COMMIT_MSG=$(git log -1 --pretty=%B | tr '\r\n' ' ' | tr '\n' ' ' | xargs)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Inject deploy vars
+      - name: Write deploy config
+        id: config
         env:
           GARAGE_DOORS: ${{ secrets.GARAGE_DOORS }}
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
-        run: node scripts/wrangler-deploy.js --inject-only
+        run: node scripts/wrangler-deploy.js --write-config
 
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           secrets: |
             API_KEY
-          command: deploy --minify --tag "v${{ steps.info.outputs.version }}" --message "${{ steps.info.outputs.commit_msg }}"
+          command: deploy --minify --config "${{ steps.config.outputs.wrangler_config }}" --tag "v${{ steps.info.outputs.version }}" --message "Deploy v${{ steps.info.outputs.version }}"
         env:
           API_KEY: ${{ secrets.API_KEY }}
