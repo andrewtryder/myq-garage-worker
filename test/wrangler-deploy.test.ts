@@ -64,7 +64,7 @@ describe('injectDeployVars', () => {
     expect(content).not.toContain('GARAGE_DOORS');
   });
 
-  it('writes deploy config to a temp file without mutating the source', () => {
+  it('writes deploy config next to the source without mutating it', () => {
     const original = fs.readFileSync(wranglerPath, 'utf8');
     const tmpPath = writeDeployConfig({
       sourcePath: wranglerPath,
@@ -74,7 +74,10 @@ describe('injectDeployVars', () => {
 
     expect(fs.readFileSync(wranglerPath, 'utf8')).toBe(original);
     expect(tmpPath).not.toBe(wranglerPath);
+    expect(path.dirname(tmpPath)).toBe(path.dirname(wranglerPath));
+    expect(path.basename(tmpPath)).toMatch(/^\.wrangler\.deploy\./);
     expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"GARAGE_DOORS"');
     expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"id": "abc123"');
+    fs.unlinkSync(tmpPath);
   });
 });

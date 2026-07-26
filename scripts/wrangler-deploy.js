@@ -1,7 +1,6 @@
 /* global process */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadDotEnv } from './setup-config.js';
@@ -53,7 +52,8 @@ export function removeInjectedGarageDoors(wranglerPath) {
 }
 
 /**
- * Copy wrangler.jsonc to a temp file, inject deploy vars, and return the temp path.
+ * Copy wrangler.jsonc to a temp file in the project root, inject deploy vars, and
+ * return that path. Keeping the file in cwd preserves relative `main` / schema paths.
  * Avoids mutating the tracked config in CI or local deploys.
  */
 export function writeDeployConfig(options = {}) {
@@ -63,8 +63,11 @@ export function writeDeployConfig(options = {}) {
     throw new Error(`wrangler config not found: ${sourcePath}`);
   }
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'myq-wrangler-'));
-  const tmpPath = path.join(tmpDir, 'wrangler.jsonc');
+  const sourceDir = path.dirname(sourcePath);
+  const tmpPath = path.join(
+    sourceDir,
+    `.wrangler.deploy.${process.pid}.${Date.now()}.jsonc`,
+  );
   fs.copyFileSync(sourcePath, tmpPath);
 
   injectDeployVars(tmpPath, {
