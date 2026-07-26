@@ -64,10 +64,7 @@ export function writeDeployConfig(options = {}) {
   }
 
   const sourceDir = path.dirname(sourcePath);
-  const tmpPath = path.join(
-    sourceDir,
-    `.wrangler.deploy.${process.pid}.${Date.now()}.jsonc`,
-  );
+  const tmpPath = path.join(sourceDir, `.wrangler.deploy.${process.pid}.${Date.now()}.jsonc`);
   fs.copyFileSync(sourcePath, tmpPath);
 
   injectDeployVars(tmpPath, {
