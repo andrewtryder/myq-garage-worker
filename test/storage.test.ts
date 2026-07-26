@@ -6,6 +6,7 @@ import {
   getDoorHistory,
   beginMessageProcessing,
   completeMessageProcessing,
+  abortMessageProcessing,
 } from '../src/storage';
 import { Env } from '../src/types';
 import { createMockKv } from './mock-kv';
@@ -187,6 +188,17 @@ describe('storage KV tests', () => {
         String(call[0]).startsWith('msgid:done:'),
       );
       expect(donePut?.[2]).toEqual({ expirationTtl: 7 * 24 * 60 * 60 });
+    });
+
+    it('clears pending on abort so the Message-ID can be claimed again', async () => {
+      expect(await beginMessageProcessing(mockEnv, '<abort@example.com>')).toBe(false);
+      expect(await beginMessageProcessing(mockEnv, '<abort@example.com>')).toBe(true);
+
+      await abortMessageProcessing(mockEnv, '<abort@example.com>');
+
+      expect([...store.keys()].some((key) => key.startsWith('msgid:pending:'))).toBe(false);
+      expect([...store.keys()].some((key) => key.startsWith('msgid:done:'))).toBe(false);
+      expect(await beginMessageProcessing(mockEnv, '<abort@example.com>')).toBe(false);
     });
   });
 });

@@ -119,6 +119,62 @@ describe('myq-garage-worker integration tests', () => {
       expect(statePuts.length).toBe(1);
     });
 
+    it('aborts pending Message-ID when subject does not match', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+      const message: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'Unrelated subject line',
+          'message-id': '<bad-subject@example.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:pending:'))).toBe(false);
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:done:'))).toBe(false);
+
+      message.headers = new Headers({
+        subject: 'myQ Notification: Garage Door Left just opened',
+        'message-id': '<bad-subject@example.com>',
+      });
+      await worker.email(message, mockEnv, {} as any);
+
+      expect(mockKV.put).toHaveBeenCalledWith('garage-left', expect.any(String));
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:done:'))).toBe(true);
+    });
+
+    it('aborts pending Message-ID when device name is unknown', async () => {
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      };
+      const message: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'myQ Notification: Mystery Door just opened',
+          'message-id': '<unknown-door@example.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+
+      expect([...kvStore.keys()].some((key) => key.startsWith('msgid:pending:'))).toBe(false);
+
+      message.headers = new Headers({
+        subject: 'myQ Notification: Garage Door Left just opened',
+        'message-id': '<unknown-door@example.com>',
+      });
+      await worker.email(message, mockEnv, {} as any);
+
+      expect(mockKV.put).toHaveBeenCalledWith('garage-left', expect.any(String));
+    });
+
     it('processes Left Garage Door closed events', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,

@@ -1,5 +1,10 @@
 import { Env } from './types';
-import { beginMessageProcessing, completeMessageProcessing, saveDoorState } from './storage';
+import {
+  abortMessageProcessing,
+  beginMessageProcessing,
+  completeMessageProcessing,
+  saveDoorState,
+} from './storage';
 import { loadConfig } from './config';
 import {
   hasFailedEmailAuthentication,
@@ -71,25 +76,32 @@ export default {
         return;
       }
 
-      const subject = message.headers.get('subject') || '';
-      console.log('Subject:', subject);
+      try {
+        const subject = message.headers.get('subject') || '';
+        console.log('Subject:', subject);
 
-      const parsed = parseMyQSubject(subject);
-      if (!parsed) {
-        console.log('Subject did not match MyQ pattern');
-        return;
+        const parsed = parseMyQSubject(subject);
+        if (!parsed) {
+          console.log('Subject did not match MyQ pattern');
+          await abortMessageProcessing(env, messageId);
+          return;
+        }
+
+        const { deviceName, action } = parsed;
+        const doorKey = resolveDoorKey(deviceName, env);
+        if (!doorKey) {
+          console.log('Unknown device name:', deviceName);
+          await abortMessageProcessing(env, messageId);
+          return;
+        }
+
+        const value = mapActionToStatus(action);
+        await saveDoorState(env, doorKey, value);
+        await completeMessageProcessing(env, messageId);
+      } catch (err) {
+        await abortMessageProcessing(env, messageId);
+        throw err;
       }
-
-      const { deviceName, action } = parsed;
-      const doorKey = resolveDoorKey(deviceName, env);
-      if (!doorKey) {
-        console.log('Unknown device name:', deviceName);
-        return;
-      }
-
-      const value = mapActionToStatus(action);
-      await saveDoorState(env, doorKey, value);
-      await completeMessageProcessing(env, messageId);
     } catch (err) {
       console.error('Error handling MyQ email:', err);
     }

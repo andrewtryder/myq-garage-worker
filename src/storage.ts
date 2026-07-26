@@ -245,3 +245,19 @@ export async function completeMessageProcessing(env: Env, messageId: string | nu
     console.error('Failed to clear pending Message-ID marker:', err);
   }
 }
+
+/** Clear a pending Message-ID claim when processing fails before state is saved. */
+export async function abortMessageProcessing(env: Env, messageId: string | null): Promise<void> {
+  if (!messageId) return;
+  const normalized = messageId.trim();
+  if (!normalized) return;
+
+  const hash = await hashMessageId(normalized);
+  const pendingKey = messageIdPendingKey(hash);
+
+  try {
+    await env.GARAGE_STATE.delete(pendingKey);
+  } catch (err) {
+    console.error('Failed to abort pending Message-ID marker:', err);
+  }
+}
