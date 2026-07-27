@@ -141,41 +141,38 @@ describe('myq-garage-worker integration tests', () => {
   });
 
   describe('Fetch Handler (HTTP UI)', () => {
-    it('serves HTML status page by default for dynamically configured doors', async () => {
+    function mockAssets(body = '<html>Garage Status</html>', contentType = 'text/html'): any {
+      return {
+        fetch: vi.fn(
+          async () =>
+            new Response(body, {
+              status: 200,
+              headers: { 'Content-Type': contentType },
+            }),
+        ),
+      };
+    }
+
+    it('proxies GET / to ASSETS for the static dashboard', async () => {
+      const assets = mockAssets();
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: assets,
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
       };
-      const req = new Request('https://worker.dev');
+      const req = new Request('https://worker.dev/');
 
       const response = await worker.fetch(req, mockEnv, {} as any);
 
       expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('text/html');
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
-      expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
-
-      const text = await response.text();
-      expect(text).toContain('Garage Door Right');
-      expect(text).toContain('Garage Door Left');
-      expect(text).not.toContain('Unlock');
-      expect(text).not.toContain('sessionStorage');
-    });
-
-    it('serves HTML status page for single door JSON object string', async () => {
-      const mockEnv: any = {
-        GARAGE_STATE: mockKV,
-        GARAGE_DOORS: JSON.stringify({ 'Garage Door Left': 'garage-left' }),
-      };
-      const req = new Request('https://worker.dev');
-      const response = await worker.fetch(req, mockEnv, {} as any);
-      expect(response.status).toBe(200);
-      expect(await response.text()).toContain('Garage Door Left');
+      expect(assets.fetch).toHaveBeenCalledWith(req);
+      expect(await response.text()).toContain('Garage Status');
     });
 
     it('returns 404 for unknown paths and 405 for wrong methods', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       };
 
@@ -195,20 +192,51 @@ describe('myq-garage-worker integration tests', () => {
       expect(methodNotAllowed.headers.get('Allow')).toContain('GET');
     });
 
-    it('returns dashboard HTML without API key (Access is operator-owned)', async () => {
+    it('serves static dashboard without API key (Access is operator-owned)', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets('<html>Garage Status</html>'),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
       const response = await worker.fetch(new Request('https://worker.dev/'), mockEnv, {} as any);
       expect(response.status).toBe(200);
-      expect(await response.text()).toContain('Garage Door Status');
+      expect(await response.text()).toContain('Garage Status');
+    });
+
+    it('GET /api/dashboard returns door DTOs without API key', async () => {
+      kvStore.set(
+        'garage-left',
+        JSON.stringify({ value: 'OPEN', createdAt: '2023-01-01T00:00:00.000Z' }),
+      );
+      const mockEnv: any = {
+        GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        API_KEY: 'super-secret',
+      };
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/dashboard'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as {
+        doors: Array<{ id: string; name: string; status: string }>;
+        recentEvents: unknown[];
+      };
+      expect(json.doors[0]).toMatchObject({
+        id: 'garage-left',
+        name: 'Garage Door Left',
+        status: 'OPEN',
+      });
+      expect(Array.isArray(json.recentEvents)).toBe(true);
     });
 
     it('returns 401 for GET /devices when API_KEY is missing', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       };
       const response = await worker.fetch(
@@ -222,6 +250,7 @@ describe('myq-garage-worker integration tests', () => {
     it('returns 401 for GET /devices without auth when API_KEY is set', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
@@ -236,6 +265,7 @@ describe('myq-garage-worker integration tests', () => {
     it('rejects query-string API keys', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
@@ -247,9 +277,10 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(401);
     });
 
-    it('allows ?json=true with Authorization Bearer token', async () => {
+    it('allows deprecated ?json=true with Authorization Bearer token', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
@@ -264,6 +295,7 @@ describe('myq-garage-worker integration tests', () => {
     it('allows access with x-api-key header on /devices', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
@@ -286,6 +318,7 @@ describe('myq-garage-worker integration tests', () => {
 
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
         API_KEY: 'super-secret',
       };
@@ -315,6 +348,7 @@ describe('myq-garage-worker integration tests', () => {
 
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
         API_KEY: 'super-secret',
       };
@@ -328,7 +362,7 @@ describe('myq-garage-worker integration tests', () => {
       expect(json).toEqual([{ id: 'garage-right', name: 'Garage Door Right', status: 'closed' }]);
     });
 
-    it('allows POST /test-alert without API key (Access protects browser)', async () => {
+    it('allows POST /api/test-alert without API key (Access protects browser)', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(() =>
@@ -341,11 +375,12 @@ describe('myq-garage-worker integration tests', () => {
 
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
         API_KEY: 'super-secret',
       };
 
-      const req = new Request('https://worker.dev/test-alert', {
+      const req = new Request('https://worker.dev/api/test-alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,13 +400,14 @@ describe('myq-garage-worker integration tests', () => {
       vi.unstubAllGlobals();
     });
 
-    it('rejects private webhook destinations', async () => {
+    it('rejects private webhook destinations on /api/alert-config', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       };
 
-      const req = new Request('https://worker.dev/alert-config', {
+      const req = new Request('https://worker.dev/api/alert-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -385,13 +421,14 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(400);
     });
 
-    it('POST /alert-config saves config and redacts URL in response', async () => {
+    it('POST /api/alert-config saves config and redacts URL in response', async () => {
       const mockEnv: any = {
         GARAGE_STATE: mockKV,
+        ASSETS: mockAssets(),
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       };
 
-      const req = new Request('https://worker.dev/alert-config', {
+      const req = new Request('https://worker.dev/api/alert-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

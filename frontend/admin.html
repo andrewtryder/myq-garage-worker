@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Garage Admin</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="wrapper">
+      <nav class="nav">
+        <a class="nav-link" href="/">Status</a>
+        <a class="nav-link active" href="/admin">Admin</a>
+      </nav>
+
+      <h1>Administration</h1>
+      <p class="subtitle">Alerts, simulation, and diagnostics for operators.</p>
+
+      <section class="card history-card">
+        <div class="card-header">
+          <div class="door-name">Alerts</div>
+        </div>
+        <p id="alert-meta" class="alert-meta">Loading alert configuration…</p>
+
+        <label class="field-label" for="alertWebhookUrl">Webhook URL</label>
+        <input
+          type="url"
+          id="alertWebhookUrl"
+          class="sim-input"
+          placeholder="https://ntfy.sh/your-secret-topic"
+          data-has-saved="false"
+        />
+
+        <label class="field-label" for="alertThreshold">Threshold (minutes)</label>
+        <input type="number" id="alertThreshold" min="1" value="60" class="sim-input" />
+
+        <label class="field-label" for="alertMethod">HTTP method</label>
+        <select id="alertMethod" class="sim-input">
+          <option value="POST">POST (JSON body)</option>
+          <option value="GET">GET (query params)</option>
+        </select>
+
+        <label class="field-label" for="alertDoor">Door (for test payload)</label>
+        <select id="alertDoor" class="sim-input"></select>
+
+        <div class="btn-row">
+          <button type="button" id="alertSaveBtn" class="sim-btn">Save</button>
+          <button type="button" id="alertTestBtn" class="sim-btn sim-btn-secondary">
+            Test webhook
+          </button>
+        </div>
+        <div id="alertResult" class="result-box" hidden></div>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-header">
+          <div class="door-name">Simulate event</div>
+        </div>
+        <form id="simForm">
+          <label class="field-label" for="simDoor">Door</label>
+          <select id="simDoor" required class="sim-input"></select>
+
+          <label class="field-label" for="simAction">Action</label>
+          <select id="simAction" required class="sim-input">
+            <option value="opened">Opened</option>
+            <option value="closed">Closed</option>
+            <option value="stopped">Stopped</option>
+          </select>
+
+          <button type="submit" id="simBtn" class="sim-btn">Simulate Event</button>
+        </form>
+        <div id="simResult" class="result-box" hidden></div>
+      </section>
+    </div>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>

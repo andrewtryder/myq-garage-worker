@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Garage Status</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="wrapper">
+      <nav class="nav">
+        <a class="nav-link active" href="/">Status</a>
+        <a class="nav-link" href="/admin">Admin</a>
+      </nav>
+
+      <h1>Garage Status</h1>
+      <p id="summary" class="subtitle">Loading…</p>
+
+      <div id="door-grid" class="grid"></div>
+
+      <section class="card history-card">
+        <div class="card-header">
+          <div class="door-name">Recent activity</div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+    </div>
+    <script type="module" src="/src/dashboard.ts"></script>
+  </body>
+</html>

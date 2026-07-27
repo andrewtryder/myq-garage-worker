@@ -14,8 +14,8 @@ Arguments:
   DOOR_NAME   The exact configured door name (e.g. "Garage Door Left")
   ACTION      The simulated action: "opened", "closed", or "stopped"
 
-Note: POST /simulate is not API-key protected in the worker. Protect the dashboard
-with Cloudflare Access; this script must be able to reach /simulate (e.g. local
+Note: POST /api/simulate is not API-key protected in the worker. Protect the dashboard
+with Cloudflare Access; this script must be able to reach /api/simulate (e.g. local
 dev, or an Access-authenticated session / bypass for testing).
 
 Example:
@@ -27,8 +27,8 @@ Example:
 
 async function simulate() {
   let targetUrl = url;
-  if (!targetUrl.endsWith('/simulate')) {
-    targetUrl = targetUrl.replace(/\/$/, '') + '/simulate';
+  if (!targetUrl.endsWith('/api/simulate') && !targetUrl.endsWith('/simulate')) {
+    targetUrl = targetUrl.replace(/\/$/, '') + '/api/simulate';
   }
 
   const payload = {

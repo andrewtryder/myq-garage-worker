@@ -1,6 +1,6 @@
 import { AlertConfig, getAlertConfig } from './alert-config';
 import { loadConfig } from './config';
-import { formatDuration } from './status-page';
+import { formatDuration } from './format';
 import { getAlertLatch, getDoorState, setAlertLatch } from './storage';
 import { Env } from './types';
 import { WEBHOOK_FETCH_TIMEOUT_MS } from './webhook-url';

@@ -1,7 +1,7 @@
 import { loadConfig } from './config';
 import { DoorState, DoorStatus, Env } from './types';
 import { getDoorState, getDoorHistory } from './storage';
-import { DoorData, HistoryEntry, formatDuration } from './status-page';
+import { DoorData, HistoryEntry, formatDuration } from './format';
 
 export interface LoadedDoor {
   name: string;

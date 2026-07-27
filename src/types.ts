@@ -1,5 +1,7 @@
 export interface Env {
   GARAGE_STATE: KVNamespace;
+  /** Static frontend assets (Workers Static Assets binding). */
+  ASSETS: Fetcher;
   GARAGE_DOORS: Record<string, string> | string;
   API_KEY?: string;
   /** Optional exact envelope RCPT TO (recommended for production). */

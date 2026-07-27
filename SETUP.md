@@ -131,8 +131,8 @@ curl -i -H "Authorization: Bearer $API_KEY" \
 curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/"
 ```
 
-`GET /?json=true` remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
+`GET /api/dashboard` powers the status page (Access-protected, no `API_KEY`). Deprecated `GET /?json=true` still requires `API_KEY` and remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
 
-The dashboard itself does not ask for an API key. Mutation routes used by the Simulator and Alerts tabs rely on Access (or being unreachable from the public internet).
+The dashboard itself does not ask for an API key. Admin tools live at `/admin` and call `/api/simulate`, `/api/alert-config`, and `/api/test-alert` — protect those with Access (or keep them unreachable from the public internet).
 
-Configure left-open webhook alerts on the dashboard **Alerts** tab (settings are saved to KV, not environment variables). Webhook URLs must be HTTPS and are validated against private/metadata destinations.
+Configure left-open webhook alerts on **Admin** (settings are saved to KV, not environment variables). Webhook URLs must be HTTPS and are validated against private/metadata destinations.
