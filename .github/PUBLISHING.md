@@ -38,4 +38,4 @@ In **Settings → Secrets and variables → Actions**:
 
 - [ ] `npm run lint && npm run typecheck && npm test -- --run` pass on `main`
 - [ ] `npm run setup` works with a fresh clone (D1 placeholder or inject via `D1_DATABASE_ID`)
-- [ ] No personal Cloudflare account IDs, API keys, or unused legacy KV IDs in tracked files
+- [ ] No personal Cloudflare account IDs or API keys in tracked files

@@ -55,7 +55,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 }
 ```
 
-You also need a D1 database bound as `GARAGE_DB` (see `wrangler.jsonc`). Run `npm run db:migrations:remote` after creating the database. If you previously stored state in KV, run `npm run db:migrate-from-kv` once (requires `KV_NAMESPACE_ID` in the environment) before relying on D1 alone.
+You also need a D1 database bound as `GARAGE_DB` (see `wrangler.jsonc`). Run `npm run db:migrations:remote` after creating the database.
 
 ## Setup and Deployment
 
