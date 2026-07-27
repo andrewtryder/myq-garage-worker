@@ -108,10 +108,7 @@ function renderStaleBanner(data: DashboardResponse): string {
         : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 
   const perDoor = staleDoors
-    .map(
-      (door) =>
-        `Last email for ${door.name}: ${doorEmailAgeLabel(door.lastEmailAt)}.`,
-    )
+    .map((door) => `Last email for ${door.name}: ${doorEmailAgeLabel(door.lastEmailAt)}.`)
     .join(' ');
 
   return `Status confidence is stale for ${nameList}. ${perDoor}`;
