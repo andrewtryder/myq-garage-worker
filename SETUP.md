@@ -55,11 +55,13 @@ Now we need to create a dedicated email address on Cloudflare that will trigger 
 8. Select the `myq-garage-worker` you deployed in step 2.
 9. Save the rule.
 
-**Recommended:** set Worker var/secret `ALLOWED_EMAIL_TO` to that exact custom address (e.g. `garage@yourdomain.com`). The Worker rejects inbound mail whose envelope recipient does not match. Envelope MAIL FROM must be exactly `notification@myq.com`.
+**Recommended:** set Worker var/secret `ALLOWED_EMAIL_TO` to that exact custom address (e.g. `garage@yourdomain.com`). The Worker rejects inbound mail whose envelope recipient does not match.
+
+**Preferred:** configure myQ to send notifications **directly** to that Cloudflare address. Envelope MAIL FROM will be `notification@myq.com` and no Gmail hop is required.
 
 ## 4. Setting up Email Forwarding
 
-Finally, you need to forward the notifications from your personal email to the Cloudflare Worker address you just created.
+If myQ cannot send to your Cloudflare address directly, forward from your personal inbox.
 
 ### If using Gmail:
 
@@ -72,6 +74,7 @@ Finally, you need to forward the notifications from your personal email to the C
    - Click **Create filter**.
    - Check **Forward it to:** and select your Cloudflare email address.
 6. Click **Create filter**.
+7. Set Worker secret/var **`ALLOWED_FORWARD_FROM`** to the Gmail address that appears as envelope MAIL FROM when forwarding (usually your full Gmail address, e.g. `you@gmail.com`). Without this, forwarded mail is dropped (silently) because the envelope sender is no longer `notification@myq.com`.
 
 You're done! Open, close, or stop your garage door. Within a few seconds, the email should route through Gmail, to Cloudflare, trigger the worker, and update your status dashboard!
 

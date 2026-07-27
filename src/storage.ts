@@ -125,9 +125,20 @@ export async function saveDoorState(
            AND (updated_at IS NULL OR updated_at <= ?)
            AND EXISTS (
              SELECT 1 FROM door_events
-             WHERE message_id_hash = ? AND occurred_at = ?
+             WHERE message_id_hash = ?
+               AND occurred_at = ?
+               AND received_at = ?
            )`,
-      ).bind(value, stateSince, occurredAt, doorKey, occurredAt, messageIdHash, occurredAt),
+      ).bind(
+        value,
+        stateSince,
+        occurredAt,
+        doorKey,
+        occurredAt,
+        messageIdHash,
+        occurredAt,
+        receivedAt,
+      ),
     );
   } else {
     const shouldAppend = !(value === existing.value && createdAt === existing.createdAt);

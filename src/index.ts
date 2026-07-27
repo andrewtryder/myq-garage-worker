@@ -3,8 +3,8 @@ import { saveDoorState, pruneOldEvents } from './storage';
 import { loadConfig } from './config';
 import {
   hasFailedEmailAuthentication,
+  isAcceptableMyQSender,
   isAllowedRecipient,
-  isMyQEnvelopeSender,
   mapActionToStatus,
   parseMyQSubject,
   resolveDoorKey,
@@ -169,13 +169,20 @@ export default {
   async email(message: ForwardableEmailMessage, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
       const sender = typeof message.from === 'string' ? message.from : '';
-      if (!isMyQEnvelopeSender(sender)) {
-        message.setReject('Unsupported sender');
+      const { allowedEmailTo, allowedForwardFrom, eventTimeSkewHours } = loadConfig(env);
+      if (
+        !isAcceptableMyQSender({
+          envelopeFrom: sender,
+          headerFrom: message.headers.get('from'),
+          allowedForwardFrom,
+        })
+      ) {
+        // Silent drop: avoid SMTP 555 bounces (e.g. Gmail CAF) for probes / misconfigured forwards.
+        console.log('Unsupported sender, dropping:', sender);
         await recordOpsEvent(env, 'email_reject', { detail: 'unsupported_sender' });
         return;
       }
 
-      const { allowedEmailTo } = loadConfig(env);
       const recipient = typeof message.to === 'string' ? message.to : '';
       if (!isAllowedRecipient(recipient, allowedEmailTo)) {
         message.setReject('Unsupported recipient');
@@ -210,7 +217,6 @@ export default {
 
       const value = mapActionToStatus(action);
       const receivedAt = new Date().toISOString();
-      const { eventTimeSkewHours } = loadConfig(env);
       const occurredAt = resolveOrderingTime(
         message.headers.get('date'),
         receivedAt,

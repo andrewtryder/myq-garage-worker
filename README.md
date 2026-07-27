@@ -40,12 +40,13 @@ Dashboard `POST /api/alert-config` and `POST /api/test-alert` include a soft Wor
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
-| Variable Name       | Description                                                                                                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS`      | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to stable door ids (D1 `doors.id`).                                                                 |
-| `API_KEY`           | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
-| `ALLOWED_EMAIL_TO`  | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
-| `STALE_AFTER_HOURS` | Hours without a door event before the status UI marks data as stale (default `48`, set in `wrangler.jsonc` vars).                                                                        |
+| Variable Name          | Description                                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS`         | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to stable door ids (D1 `doors.id`).                                                                 |
+| `API_KEY`              | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
+| `ALLOWED_EMAIL_TO`     | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
+| `ALLOWED_FORWARD_FROM` | _(Optional)_ Envelope MAIL FROM when myQ mail is forwarded (e.g. your Gmail address). Header `From` must still be `notification@myq.com`. Prefer direct myQ → Cloudflare when possible.  |
+| `STALE_AFTER_HOURS`    | Hours without a door event before the status UI marks data as stale (default `48`, set in `wrangler.jsonc` vars).                                                                        |
 
 **Example configuration:**
 

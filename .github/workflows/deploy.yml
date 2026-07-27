@@ -108,7 +108,9 @@ jobs:
           secrets: |
             API_KEY
             ALLOWED_EMAIL_TO
+            ALLOWED_FORWARD_FROM
           command: deploy --minify --config "${{ steps.config.outputs.wrangler_config }}" --tag "v${{ steps.info.outputs.version }}" --message "Deploy v${{ steps.info.outputs.version }}"
         env:
           API_KEY: ${{ secrets.API_KEY }}
           ALLOWED_EMAIL_TO: ${{ secrets.ALLOWED_EMAIL_TO }}
+          ALLOWED_FORWARD_FROM: ${{ secrets.ALLOWED_FORWARD_FROM }}

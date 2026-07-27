@@ -2,8 +2,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   hasFailedEmailAuthentication,
+  isAcceptableMyQSender,
   isAllowedRecipient,
   isMyQEnvelopeSender,
+  isMyQHeaderFrom,
+  parseAddressFromHeader,
   parseMyQSubject,
   resolveDoorKey,
   mapActionToStatus,
@@ -120,6 +123,75 @@ describe('email-parser unit tests', () => {
       expect(isMyQEnvelopeSender(' notification@myq.com ')).toBe(true);
       expect(isMyQEnvelopeSender('notification@myq.com.attacker.example')).toBe(false);
       expect(isMyQEnvelopeSender('evil@example.com')).toBe(false);
+    });
+  });
+
+  describe('parseAddressFromHeader / isMyQHeaderFrom', () => {
+    it('parses bare and display-name From headers', () => {
+      expect(parseAddressFromHeader('notification@myq.com')).toBe('notification@myq.com');
+      expect(parseAddressFromHeader('myQ <notification@myq.com>')).toBe('notification@myq.com');
+      expect(parseAddressFromHeader('"Chamberlain" <notification@myq.com>')).toBe(
+        'notification@myq.com',
+      );
+      expect(parseAddressFromHeader('not-an-email')).toBeNull();
+      expect(parseAddressFromHeader(null)).toBeNull();
+    });
+
+    it('detects myQ header From', () => {
+      expect(isMyQHeaderFrom('myQ Notifications <notification@myq.com>')).toBe(true);
+      expect(isMyQHeaderFrom('other@example.com')).toBe(false);
+    });
+  });
+
+  describe('isAcceptableMyQSender', () => {
+    it('accepts direct myQ envelope without forwarder config', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'notification@myq.com',
+          headerFrom: 'someone@else.com',
+          allowedForwardFrom: undefined,
+        }),
+      ).toBe(true);
+    });
+
+    it('accepts configured forwarder when header From is myQ', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'user@gmail.com',
+          headerFrom: 'myQ <notification@myq.com>',
+          allowedForwardFrom: 'user@gmail.com',
+        }),
+      ).toBe(true);
+    });
+
+    it('rejects Gmail envelope without ALLOWED_FORWARD_FROM', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'user@gmail.com',
+          headerFrom: 'notification@myq.com',
+          allowedForwardFrom: undefined,
+        }),
+      ).toBe(false);
+    });
+
+    it('rejects forged header From with wrong envelope', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'attacker@evil.com',
+          headerFrom: 'notification@myq.com',
+          allowedForwardFrom: 'user@gmail.com',
+        }),
+      ).toBe(false);
+    });
+
+    it('rejects forwarder envelope when header From is not myQ', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'user@gmail.com',
+          headerFrom: 'user@gmail.com',
+          allowedForwardFrom: 'user@gmail.com',
+        }),
+      ).toBe(false);
     });
   });
 

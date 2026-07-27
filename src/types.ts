@@ -7,6 +7,11 @@ export interface Env {
   API_KEY?: string;
   /** Optional exact envelope RCPT TO (recommended for production). */
   ALLOWED_EMAIL_TO?: string;
+  /**
+   * Optional envelope MAIL FROM for Gmail (or other) forwards.
+   * When set, mail is accepted if envelope matches this address AND header From is notification@myq.com.
+   */
+  ALLOWED_FORWARD_FROM?: string;
   /** Deployed worker version (wrangler vars). */
   VERSION?: string;
   /** Hours without a door event before status is considered stale (default 48). */

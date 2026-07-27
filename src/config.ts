@@ -5,6 +5,7 @@ export interface AppConfig {
   garageDoors: Readonly<Record<string, string>>;
   apiKey: string | undefined;
   allowedEmailTo: string | undefined;
+  allowedForwardFrom: string | undefined;
   staleAfterHours: number;
   eventTimeSkewHours: number;
 }
@@ -126,11 +127,16 @@ export function loadConfig(env: Env): AppConfig {
     typeof env.ALLOWED_EMAIL_TO === 'string' && env.ALLOWED_EMAIL_TO.trim().length > 0
       ? env.ALLOWED_EMAIL_TO.trim().toLowerCase()
       : undefined;
+  const allowedForwardFrom =
+    typeof env.ALLOWED_FORWARD_FROM === 'string' && env.ALLOWED_FORWARD_FROM.trim().length > 0
+      ? env.ALLOWED_FORWARD_FROM.trim().toLowerCase()
+      : undefined;
 
   return Object.freeze({
     garageDoors: Object.freeze(parseGarageDoors(env.GARAGE_DOORS)),
     apiKey: typeof env.API_KEY === 'string' && env.API_KEY.length > 0 ? env.API_KEY : undefined,
     allowedEmailTo,
+    allowedForwardFrom,
     staleAfterHours: parseStaleAfterHours(env.STALE_AFTER_HOURS),
     eventTimeSkewHours: parseEventTimeSkewHours(env.EVENT_TIME_SKEW_HOURS),
   });
