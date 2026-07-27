@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadConfig, parseGarageDoors, isDoorStatus } from '../src/config';
+import { loadConfig, parseGarageDoors, isDoorStatus, validateGarageDoors } from '../src/config';
 import { Env } from '../src/types';
 
 describe('config', () => {
@@ -37,6 +37,31 @@ describe('config', () => {
       GARAGE_DOORS: {},
     } as Env);
     expect(config.staleAfterHours).toBe(48);
+  });
+
+  it('rejects ambiguous GARAGE_DOORS mappings', () => {
+    expect(
+      parseGarageDoors({
+        'Garage Door': 'door-1',
+        'garage door': 'door-2',
+      }),
+    ).toEqual({});
+    expect(
+      parseGarageDoors({
+        Main: 'door-1',
+        Side: 'door-1',
+      }),
+    ).toEqual({});
+    expect(parseGarageDoors({ Main: 'Bad Id!' })).toEqual({});
+  });
+
+  it('validateGarageDoors throws on duplicate ids', () => {
+    expect(() =>
+      validateGarageDoors({
+        Main: 'door-1',
+        Side: 'door-1',
+      }),
+    ).toThrow(/duplicate id/);
   });
 
   it('exposes isDoorStatus helper', () => {

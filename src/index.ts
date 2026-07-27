@@ -21,7 +21,7 @@ import { buildDashboard } from './dashboard';
 import { buildHealth } from './health';
 import { recordOpsEvent, pruneOpsEvents } from './ops';
 import { isApiKeyAuthorized, routeRequiresApiKey } from './auth';
-import { consumeRateLimit } from './rate-limit';
+import { consumeRateLimit, pruneRateLimits } from './rate-limit';
 import {
   jsonResponse,
   methodNotAllowedResponse,
@@ -233,6 +233,7 @@ export default {
         console.log(`Pruned ${pruned} door_events older than retention window`);
       }
       await pruneOpsEvents(env);
+      await pruneRateLimits(env);
     } catch (err) {
       console.error('Error pruning old events:', err);
     }
@@ -307,7 +308,8 @@ export default {
       }
 
       if (request.method === 'GET' && route === '/health') {
-        return jsonResponse(await buildHealth(env));
+        const health = await buildHealth(env);
+        return jsonResponse(health, health.d1Ok ? 200 : 503);
       }
 
       if (request.method === 'GET' && route === '/devices') {

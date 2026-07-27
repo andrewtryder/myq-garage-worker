@@ -207,6 +207,21 @@ describe('myq-garage-worker integration tests', () => {
       expect(body).not.toContain('garage@example.com');
     });
 
+    it('GET /health returns 503 when D1 is down', async () => {
+      const mockEnv: any = baseEnv({ VERSION: '1.1.0' });
+      mockEnv.GARAGE_DB.prepare = vi.fn(() => {
+        throw new Error('d1 down');
+      });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/health'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(503);
+      const json = (await response.json()) as { d1Ok: boolean };
+      expect(json.d1Ok).toBe(false);
+    });
+
     it('returns 401 for GET /devices when API_KEY is missing', async () => {
       const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
       const response = await worker.fetch(

@@ -7,6 +7,7 @@ interface DashboardDoor {
   stateSince: string;
   durationSeconds: number | null;
   durationText: string | null;
+  lastEmailAt: string | null;
   lastEventAt: string | null;
   stale: boolean;
 }
@@ -23,8 +24,11 @@ interface DashboardResponse {
   doors: DashboardDoor[];
   recentEvents: DashboardEvent[];
   lastEventAt: string | null;
+  lastEmailReceivedAt: string | null;
+  lastStateChangeAt: string | null;
   staleAfterHours: number;
   stale: boolean;
+  emailPipelineStale: boolean;
   openCount: number;
   healthy: boolean;
 }
@@ -52,11 +56,18 @@ function durationLabel(door: DashboardDoor): string {
   return `${status} for ${door.durationText}`;
 }
 
+function emailAgeLabel(iso: string | null | undefined): string {
+  if (!iso) return 'no email yet';
+  const relative = formatRelativeTime(iso).replace(/^\(|\)$/g, '');
+  return relative ? `Last garage email ${relative}` : `Last garage email ${iso}`;
+}
+
 function healthLine(data: DashboardResponse): { text: string; className: string } {
-  const age = formatRelativeTime(data.generatedAt).replace(/^\(|\)$/g, '') || 'just now';
-  if (data.stale) {
+  const emailAge = emailAgeLabel(data.lastEmailReceivedAt ?? data.lastEventAt);
+  const checked = formatRelativeTime(data.generatedAt).replace(/^\(|\)$/g, '') || 'just now';
+  if (data.stale || data.emailPipelineStale) {
     return {
-      text: `Status may be stale · Updated ${age}`,
+      text: `Status may be stale · ${emailAge}`,
       className: 'health-line health-stale',
     };
   }
@@ -65,22 +76,26 @@ function healthLine(data: DashboardResponse): { text: string; className: string 
       data.openCount === 1
         ? `${data.doors.find((door) => door.status.toUpperCase() === 'OPEN')?.name ?? 'A door'} is open`
         : `${data.openCount} doors are open`;
-    return { text: `${label} · Updated ${age}`, className: 'health-line health-open' };
+    return {
+      text: `${label} · ${emailAge} · Checked ${checked}`,
+      className: 'health-line health-open',
+    };
   }
   return {
-    text: `All systems healthy · Updated ${age}`,
+    text: `All systems healthy · ${emailAge} · Checked ${checked}`,
     className: 'health-line health-ok',
   };
 }
 
 function renderStaleBanner(data: DashboardResponse): string {
-  if (!data.stale) return '';
+  if (!data.stale && !data.emailPipelineStale) return '';
   const hours = data.staleAfterHours;
   const days = hours >= 24 ? `${Math.round((hours / 24) * 10) / 10} days` : `${hours} hours`;
-  const last = data.lastEventAt
-    ? `Last notification ${formatRelativeTime(data.lastEventAt)}.`
-    : 'No garage notification has been recorded yet.';
-  return `Status may be stale. No garage notification within ${days}. ${last}`;
+  const last = data.lastEmailReceivedAt ?? data.lastEventAt;
+  const lastText = last
+    ? `Last garage email ${formatRelativeTime(last)}.`
+    : 'No garage email has been recorded yet.';
+  return `Status may be stale. No garage email within ${days}. ${lastText}`;
 }
 
 function renderDoors(doors: DashboardDoor[]): string {

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadDotEnv } from './setup-config.js';
+import { parseAndValidateGarageDoors } from './garage-doors-validate.js';
 
 const GARAGE_DOORS_VAR_PATTERN = /\n\s*"GARAGE_DOORS"\s*:\s*(?:"(?:\\.|[^"\\])*"|\{[^}]*\}),?/g;
 
@@ -26,12 +27,8 @@ export function injectDeployVars(wranglerPath, { d1DatabaseId, garageDoors } = {
   }
 
   if (garageDoors !== undefined && garageDoors !== null && garageDoors !== '') {
-    const jsonStr = typeof garageDoors === 'string' ? garageDoors : JSON.stringify(garageDoors);
-    const parsed = JSON.parse(jsonStr);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('GARAGE_DOORS must be a JSON object mapping door names to door ids');
-    }
-
+    const validated = parseAndValidateGarageDoors(garageDoors);
+    const jsonStr = JSON.stringify(validated);
     const jsoncValue = JSON.stringify(jsonStr);
     content = content.replace(GARAGE_DOORS_VAR_PATTERN, '');
     content = content.replace(
