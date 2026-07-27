@@ -8,6 +8,7 @@
   },
   "vars": {
     "VERSION": "1.1.0", // x-release-please-version
+    "STALE_AFTER_HOURS": "48",
   },
   // Configure how often to check for left-open doors
   "triggers": {
@@ -25,6 +26,6 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "run_worker_first": ["/api/*", "/devices", "/"],
+    "run_worker_first": ["/api/*", "/devices", "/health", "/"],
   },
 }

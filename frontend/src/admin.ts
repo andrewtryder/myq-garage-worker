@@ -32,7 +32,44 @@ function showResult(el: HTMLElement, message: string, isError: boolean): void {
   el.classList.toggle('result-ok', !isError);
 }
 
+async function loadDiagnostics(): Promise<void> {
+  const el = document.getElementById('diag-meta');
+  if (!el) return;
+  try {
+    const health = await apiFetch<{
+      version: string;
+      doorCount: number;
+      d1Ok: boolean;
+      hasAllowedEmailTo: boolean;
+      hasApiKey: boolean;
+      staleAfterHours: number;
+      lastEmailOk: { occurredAt: string } | null;
+      lastEmailReject: { occurredAt: string; detail: string | null } | null;
+    }>('/health');
+    const lines = [
+      `Worker v${health.version}`,
+      `D1 ${health.d1Ok ? 'ok' : 'unreachable'}`,
+      `${health.doorCount} door(s) configured`,
+      `ALLOWED_EMAIL_TO ${health.hasAllowedEmailTo ? 'set' : 'not set'}`,
+      `API_KEY ${health.hasApiKey ? 'set' : 'not set'}`,
+      `Stale after ${health.staleAfterHours}h`,
+    ];
+    if (health.lastEmailOk) {
+      lines.push(`Last email ok: ${health.lastEmailOk.occurredAt}`);
+    }
+    if (health.lastEmailReject) {
+      lines.push(
+        `Last reject: ${health.lastEmailReject.detail ?? 'unknown'} @ ${health.lastEmailReject.occurredAt}`,
+      );
+    }
+    el.textContent = lines.join(' · ');
+  } catch (err) {
+    el.textContent = err instanceof Error ? err.message : 'Failed to load health';
+  }
+}
+
 async function loadAdmin(): Promise<void> {
+  void loadDiagnostics();
   const meta = document.getElementById('alert-meta');
   const webhookInput = document.getElementById('alertWebhookUrl') as HTMLInputElement | null;
   const thresholdInput = document.getElementById('alertThreshold') as HTMLInputElement | null;
@@ -140,14 +177,19 @@ function wireAdminActions(): void {
     simBtn.disabled = true;
     simBtn.textContent = 'Simulating…';
     try {
-      const data = await apiFetch<{ success: boolean; door: string; state: string }>(
-        '/api/simulate',
-        {
-          method: 'POST',
-          body: JSON.stringify({ deviceName: door, action }),
-        },
-      );
-      showResult(simResult, `Updated ${data.door} → ${data.state}`, false);
+      const data = await apiFetch<{
+        success: boolean;
+        door: string;
+        state: string;
+        applied: boolean;
+      }>('/api/simulate', {
+        method: 'POST',
+        body: JSON.stringify({ deviceName: door, action }),
+      });
+      const note = data.applied
+        ? `Updated ${data.door} → ${data.state}`
+        : `Not applied for ${data.door}; current state remains ${data.state}`;
+      showResult(simResult, note, !data.applied);
     } catch (err) {
       showResult(simResult, err instanceof ApiError ? err.message : 'Simulation failed', true);
     } finally {

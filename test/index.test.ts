@@ -172,8 +172,54 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(200);
       const json = (await response.json()) as {
         doors: Array<{ id: string; status: string }>;
+        stale: boolean;
+        openCount: number;
       };
       expect(json.doors[0]).toMatchObject({ id: 'garage-left', status: 'OPEN' });
+      expect(json.openCount).toBe(1);
+      expect(typeof json.stale).toBe('boolean');
+    });
+
+    it('GET /health returns diagnostics without secrets', async () => {
+      const mockEnv: any = baseEnv({
+        VERSION: '1.1.0',
+        API_KEY: 'super-secret',
+        ALLOWED_EMAIL_TO: 'garage@example.com',
+      });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/health'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as {
+        version: string;
+        d1Ok: boolean;
+        hasApiKey: boolean;
+        hasAllowedEmailTo: boolean;
+      };
+      expect(json.version).toBe('1.1.0');
+      expect(json.d1Ok).toBe(true);
+      expect(json.hasApiKey).toBe(true);
+      expect(json.hasAllowedEmailTo).toBe(true);
+      const body = JSON.stringify(json);
+      expect(body).not.toContain('super-secret');
+      expect(body).not.toContain('garage@example.com');
+    });
+
+    it('GET /health returns 503 when D1 is down', async () => {
+      const mockEnv: any = baseEnv({ VERSION: '1.1.0' });
+      mockEnv.GARAGE_DB.prepare = vi.fn(() => {
+        throw new Error('d1 down');
+      });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/health'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(503);
+      const json = (await response.json()) as { d1Ok: boolean };
+      expect(json.d1Ok).toBe(false);
     });
 
     it('returns 401 for GET /devices when API_KEY is missing', async () => {
@@ -266,6 +312,57 @@ describe('myq-garage-worker integration tests', () => {
         {} as any,
       );
       expect(response.status).toBe(400);
+    });
+
+    it('POST /api/simulate applies and returns persisted state', async () => {
+      const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceName: 'Garage Door Left', action: 'opened' }),
+        }),
+        mockEnv,
+        {} as any,
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        door: string;
+        state: string;
+        applied: boolean;
+      };
+      expect(response.status).toBe(200);
+      expect(json).toMatchObject({
+        success: true,
+        door: 'Garage Door Left',
+        state: 'OPEN',
+        applied: true,
+      });
+    });
+
+    it('POST /api/simulate reports applied:false when chronology rejects', async () => {
+      const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
+      await saveDoorState(mockEnv, 'garage-left', 'OPEN', { source: 'simulate' });
+      d1State.doors.get('garage-left').updated_at = '2099-01-01T00:00:00.000Z';
+
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceName: 'Garage Door Left', action: 'closed' }),
+        }),
+        mockEnv,
+        {} as any,
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        state: string;
+        applied: boolean;
+      };
+      expect(response.status).toBe(200);
+      expect(json.applied).toBe(false);
+      expect(json.state).toBe('OPEN');
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
     });
 
     it('POST /api/alert-config saves config and redacts URL in response', async () => {

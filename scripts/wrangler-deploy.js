@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadDotEnv } from './setup-config.js';
+import { parseAndValidateGarageDoors } from './garage-doors-validate.js';
 
 const GARAGE_DOORS_VAR_PATTERN = /\n\s*"GARAGE_DOORS"\s*:\s*(?:"(?:\\.|[^"\\])*"|\{[^}]*\}),?/g;
 
@@ -26,12 +27,8 @@ export function injectDeployVars(wranglerPath, { d1DatabaseId, garageDoors } = {
   }
 
   if (garageDoors !== undefined && garageDoors !== null && garageDoors !== '') {
-    const jsonStr = typeof garageDoors === 'string' ? garageDoors : JSON.stringify(garageDoors);
-    const parsed = JSON.parse(jsonStr);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('GARAGE_DOORS must be a JSON object mapping door names to door ids');
-    }
-
+    const validated = parseAndValidateGarageDoors(garageDoors);
+    const jsonStr = JSON.stringify(validated);
     const jsoncValue = JSON.stringify(jsonStr);
     content = content.replace(GARAGE_DOORS_VAR_PATTERN, '');
     content = content.replace(
@@ -107,26 +104,41 @@ export function deployWorker(options = {}) {
     garageDoors: options.garageDoors ?? process.env.GARAGE_DOORS,
   });
 
-  const version = options.version ?? readPackageVersion(cwd);
-  const message = options.message ?? `Deploy v${version}`;
-  const args = [
-    'deploy',
-    '--minify',
-    '--config',
-    configPath,
-    '--tag',
-    `v${version}`,
-    '--message',
-    message,
-    ...(options.extraArgs ?? []),
-  ];
+  try {
+    if (!options.skipMigrations && !options.dryRun) {
+      runWranglerDeploy(
+        ['d1', 'migrations', 'apply', 'GARAGE_DB', '--remote', '--config', configPath],
+        { env: process.env, inherit: options.inherit ?? true },
+      );
+    }
 
-  if (options.dryRun) {
-    args.push('--dry-run');
+    const version = options.version ?? readPackageVersion(cwd);
+    const message = options.message ?? `Deploy v${version}`;
+    const args = [
+      'deploy',
+      '--minify',
+      '--config',
+      configPath,
+      '--tag',
+      `v${version}`,
+      '--message',
+      message,
+      ...(options.extraArgs ?? []),
+    ];
+
+    if (options.dryRun) {
+      args.push('--dry-run');
+    }
+
+    runWranglerDeploy(args, { env: process.env, inherit: options.inherit ?? true });
+    return configPath;
+  } finally {
+    try {
+      fs.unlinkSync(configPath);
+    } catch {
+      // ignore cleanup failures
+    }
   }
-
-  runWranglerDeploy(args, { env: process.env, inherit: options.inherit ?? true });
-  return configPath;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

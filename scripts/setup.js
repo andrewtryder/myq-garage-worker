@@ -9,6 +9,7 @@ import {
   updateWranglerD1DatabaseId,
 } from './setup-config.js';
 import { deployWorker as runWranglerDeploy } from './wrangler-deploy.js';
+import { validateGarageDoors } from './garage-doors-validate.js';
 
 loadDotEnv();
 
@@ -166,7 +167,7 @@ async function configureGarageDoors(existingConfig, mode) {
     console.log(`Using existing GARAGE_DOORS: ${JSON.stringify(existingConfig.garageDoors)}`);
     const keep = await question('Keep this door mapping? (Y/n): ');
     if (keep.toLowerCase() !== 'n') {
-      return existingConfig.garageDoors;
+      return validateGarageDoors(existingConfig.garageDoors);
     }
   }
 
@@ -174,11 +175,11 @@ async function configureGarageDoors(existingConfig, mode) {
     console.log(`Current GARAGE_DOORS: ${JSON.stringify(existingConfig.garageDoors)}`);
     const replace = await question('Replace this mapping? (y/N): ');
     if (replace.toLowerCase() !== 'y') {
-      return existingConfig.garageDoors;
+      return validateGarageDoors(existingConfig.garageDoors);
     }
   }
 
-  return collectDoorsInteractive();
+  return validateGarageDoors(await collectDoorsInteractive());
 }
 
 async function configureApiKey(existingConfig, mode) {

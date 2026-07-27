@@ -3,27 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Garage Status</title>
+    <title>Garage</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <div class="wrapper">
-      <nav class="nav">
-        <a class="nav-link active" href="/">Status</a>
-        <a class="nav-link" href="/admin">Admin</a>
+      <nav class="nav" aria-label="Primary">
+        <a class="nav-link active" href="/" aria-current="page">Garage</a>
+        <a class="nav-link" href="/admin">Administration</a>
       </nav>
 
-      <h1>Garage Status</h1>
-      <p id="summary" class="subtitle">Loading…</p>
+      <main>
+        <header class="hero">
+          <h1>Garage</h1>
+          <p id="health-line" class="health-line" aria-live="polite">Loading…</p>
+        </header>
 
-      <div id="door-grid" class="grid"></div>
+        <div
+          id="stale-banner"
+          class="banner banner-stale"
+          hidden
+          role="status"
+          aria-live="polite"
+        ></div>
+        <div
+          id="error-banner"
+          class="banner banner-error"
+          hidden
+          role="alert"
+          aria-live="assertive"
+        ></div>
 
-      <section class="card history-card">
-        <div class="card-header">
-          <div class="door-name">Recent activity</div>
-        </div>
-        <div id="timeline" class="timeline"></div>
-      </section>
+        <section aria-labelledby="doors-heading">
+          <h2 id="doors-heading" class="section-title visually-hidden">Doors</h2>
+          <div id="door-grid" class="grid" aria-busy="true">
+            <p class="empty">Loading door status…</p>
+          </div>
+        </section>
+
+        <section class="activity" aria-labelledby="activity-heading">
+          <h2 id="activity-heading" class="section-title">Recent activity</h2>
+          <div id="timeline" class="timeline">
+            <p class="empty">Loading…</p>
+          </div>
+        </section>
+
+        <p class="admin-link">
+          <a href="/admin">Administration</a>
+          ·
+          <a href="/health">Health JSON</a>
+        </p>
+      </main>
     </div>
     <script type="module" src="/src/dashboard.ts"></script>
   </body>

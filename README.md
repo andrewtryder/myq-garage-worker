@@ -40,11 +40,12 @@ Dashboard `POST /api/alert-config` and `POST /api/test-alert` include a soft Wor
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
-| Variable Name      | Description                                                                                                                                                                              |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to stable door ids (D1 `doors.id`).                                                                 |
-| `API_KEY`          | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
-| `ALLOWED_EMAIL_TO` | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
+| Variable Name       | Description                                                                                                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS`      | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to stable door ids (D1 `doors.id`).                                                                 |
+| `API_KEY`           | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
+| `ALLOWED_EMAIL_TO`  | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
+| `STALE_AFTER_HOURS` | Hours without a door event before the status UI marks data as stale (default `48`, set in `wrangler.jsonc` vars).                                                                        |
 
 **Example configuration:**
 
@@ -56,6 +57,8 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 ```
 
 You also need a D1 database bound as `GARAGE_DB` (see `wrangler.jsonc`). Run `npm run db:migrations:remote` after creating the database.
+
+Operational health (no secrets) is available at `GET /health`. The status page at `/` auto-refreshes every 45 seconds and warns when door data is older than `STALE_AFTER_HOURS`.
 
 ## Setup and Deployment
 

@@ -7,6 +7,10 @@ export interface Env {
   API_KEY?: string;
   /** Optional exact envelope RCPT TO (recommended for production). */
   ALLOWED_EMAIL_TO?: string;
+  /** Deployed worker version (wrangler vars). */
+  VERSION?: string;
+  /** Hours without a door event before status is considered stale (default 48). */
+  STALE_AFTER_HOURS?: string | number;
 }
 
 export type DoorStatus = 'OPEN' | 'CLOSED' | 'STOPPED' | 'UNKNOWN';

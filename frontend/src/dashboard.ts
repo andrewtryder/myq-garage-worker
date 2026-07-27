@@ -7,6 +7,9 @@ interface DashboardDoor {
   stateSince: string;
   durationSeconds: number | null;
   durationText: string | null;
+  lastEmailAt: string | null;
+  lastEventAt: string | null;
+  stale: boolean;
 }
 
 interface DashboardEvent {
@@ -20,83 +23,212 @@ interface DashboardResponse {
   generatedAt: string;
   doors: DashboardDoor[];
   recentEvents: DashboardEvent[];
+  lastEventAt: string | null;
+  lastEmailReceivedAt: string | null;
+  lastStateChangeAt: string | null;
+  staleAfterHours: number;
+  stale: boolean;
+  emailPipelineStale: boolean;
+  openCount: number;
+  healthy: boolean;
 }
 
-function renderSummary(doors: DashboardDoor[]): string {
-  const open = doors.filter((door) => door.status.toUpperCase() === 'OPEN');
-  if (doors.length === 0) return 'No doors configured.';
-  if (open.length === 0) return 'All doors closed';
-  if (open.length === 1) return `${open[0].name} is open`;
-  return `${open.length} doors are open`;
+const REFRESH_MS = 45_000;
+
+function statusIcon(status: string): string {
+  switch (status) {
+    case 'OPEN':
+      return '!';
+    case 'CLOSED':
+      return '✓';
+    case 'STOPPED':
+      return '◼';
+    default:
+      return '?';
+  }
+}
+
+function durationLabel(door: DashboardDoor): string {
+  const status = door.status.toUpperCase();
+  if (!door.durationText) return 'No timestamp recorded';
+  if (status === 'OPEN') return `Open for ${door.durationText}`;
+  if (status === 'CLOSED') return `Closed ${door.durationText} ago`;
+  return `${status} for ${door.durationText}`;
+}
+
+function emailAgeLabel(iso: string | null | undefined): string {
+  if (!iso) return 'no email yet';
+  const relative = formatRelativeTime(iso).replace(/^\(|\)$/g, '');
+  return relative ? `Last garage email ${relative}` : `Last garage email ${iso}`;
+}
+
+function healthLine(data: DashboardResponse): { text: string; className: string } {
+  const emailAge = emailAgeLabel(data.lastEmailReceivedAt ?? data.lastEventAt);
+  const checked = formatRelativeTime(data.generatedAt).replace(/^\(|\)$/g, '') || 'just now';
+  const staleDoors = data.doors.filter((door) => door.stale);
+  if (staleDoors.length > 0 || data.stale || data.emailPipelineStale) {
+    const n = staleDoors.length || 1;
+    return {
+      text: `${n} door status may be stale · ${emailAge}`,
+      className: 'health-line health-stale',
+    };
+  }
+  if (data.openCount > 0) {
+    const label =
+      data.openCount === 1
+        ? `${data.doors.find((door) => door.status.toUpperCase() === 'OPEN')?.name ?? 'A door'} is open`
+        : `${data.openCount} doors are open`;
+    return {
+      text: `${label} · ${emailAge} · Checked ${checked}`,
+      className: 'health-line health-open',
+    };
+  }
+  return {
+    text: `All systems healthy · ${emailAge} · Checked ${checked}`,
+    className: 'health-line health-ok',
+  };
+}
+
+function doorEmailAgeLabel(iso: string | null | undefined): string {
+  if (!iso) return 'no email yet';
+  const relative = formatRelativeTime(iso).replace(/^\(|\)$/g, '');
+  return relative || iso;
+}
+
+function renderStaleBanner(data: DashboardResponse): string {
+  const staleDoors = data.doors.filter((door) => door.stale);
+  if (staleDoors.length === 0) return '';
+
+  const names = staleDoors.map((door) => door.name);
+  const nameList =
+    names.length === 1
+      ? names[0]
+      : names.length === 2
+        ? `${names[0]} and ${names[1]}`
+        : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+
+  const perDoor = staleDoors
+    .map(
+      (door) =>
+        `Last email for ${door.name}: ${doorEmailAgeLabel(door.lastEmailAt)}.`,
+    )
+    .join(' ');
+
+  return `Status confidence is stale for ${nameList}. ${perDoor}`;
 }
 
 function renderDoors(doors: DashboardDoor[]): string {
   if (doors.length === 0) {
-    return '<div class="card"><p class="empty">No doors configured.</p></div>';
+    return '<p class="empty">No doors configured.</p>';
   }
 
-  return doors
+  const sorted = [...doors].sort((a, b) => {
+    const aOpen = a.status.toUpperCase() === 'OPEN' ? 0 : 1;
+    const bOpen = b.status.toUpperCase() === 'OPEN' ? 0 : 1;
+    return aOpen - bOpen;
+  });
+
+  return sorted
     .map((door) => {
       const status = door.status.toUpperCase() || 'UNKNOWN';
-      const duration = door.durationText
-        ? `<div class="duration">${escapeHtml(door.durationText)}</div>`
-        : '';
+      const open = status === 'OPEN';
       return `
-        <div class="card">
-          <div class="card-header">
-            <div class="door-name">${escapeHtml(door.name)}</div>
-            <span class="status-pill ${statusClass(status)}">${escapeHtml(status)}</span>
+        <article class="door ${open ? 'door-open' : ''} ${door.stale ? 'door-stale' : ''}">
+          <div class="door-header">
+            <h3 class="door-name">${escapeHtml(door.name)}</h3>
+            <p class="door-status ${statusClass(status)}" aria-label="Status ${escapeHtml(status)}">
+              <span class="door-icon" aria-hidden="true">${statusIcon(status)}</span>
+              <span>${escapeHtml(status)}</span>
+            </p>
           </div>
-          <div class="meta">Since ${escapeHtml(door.stateSince || 'N/A')}</div>
-          ${duration}
-        </div>`;
+          <p class="door-duration">${escapeHtml(durationLabel(door))}</p>
+          ${door.stale ? '<p class="door-stale-note">No recent notification for this door</p>' : ''}
+        </article>`;
     })
     .join('');
 }
 
 function renderTimeline(events: DashboardEvent[]): string {
   if (events.length === 0) {
-    return '<div class="empty">No recent activity recorded.</div>';
+    return '<p class="empty">No recent activity recorded.</p>';
   }
 
   return events
     .map((event) => {
       const status = (event.status || '').toUpperCase();
-      const relative = formatRelativeTime(event.createdAt);
+      const relative = formatRelativeTime(event.createdAt).replace(/^\(|\)$/g, '');
+      const action =
+        status === 'OPEN' ? 'opened' : status === 'CLOSED' ? 'closed' : status.toLowerCase();
       return `
         <div class="timeline-item">
           <div class="timeline-main">
             <span class="timeline-door">${escapeHtml(event.doorName)}</span>
-            <span class="timeline-action action-${statusClass(status).replace('status-', '')}">${escapeHtml(status)}</span>
+            <span class="timeline-action action-${statusClass(status).replace('status-', '')}">${escapeHtml(action)}</span>
           </div>
-          <div class="timeline-time">
-            ${escapeHtml(event.createdAt)}
-            <span class="timeline-relative">${escapeHtml(relative)}</span>
-          </div>
+          <div class="timeline-time">${escapeHtml(relative || event.createdAt)}</div>
         </div>`;
     })
     .join('');
 }
 
+function setHidden(el: HTMLElement | null, hidden: boolean): void {
+  if (!el) return;
+  el.hidden = hidden;
+}
+
 async function loadDashboard(): Promise<void> {
-  const summary = document.getElementById('summary');
+  const healthEl = document.getElementById('health-line');
   const grid = document.getElementById('door-grid');
   const timeline = document.getElementById('timeline');
-  if (!summary || !grid || !timeline) return;
+  const staleBanner = document.getElementById('stale-banner');
+  const errorBanner = document.getElementById('error-banner');
+  if (!healthEl || !grid || !timeline) return;
+
+  grid.setAttribute('aria-busy', 'true');
 
   try {
     const data = await apiFetch<DashboardResponse>('/api/dashboard');
-    summary.textContent = renderSummary(data.doors);
-    summary.classList.toggle(
-      'summary-open',
-      data.doors.some((door) => door.status.toUpperCase() === 'OPEN'),
-    );
+    const health = healthLine(data);
+    healthEl.textContent = health.text;
+    healthEl.className = health.className;
+
+    const staleText = renderStaleBanner(data);
+    if (staleBanner) {
+      staleBanner.textContent = staleText;
+      setHidden(staleBanner, !staleText);
+    }
+    setHidden(errorBanner, true);
+
     grid.innerHTML = renderDoors(data.doors);
     timeline.innerHTML = renderTimeline(data.recentEvents);
   } catch (err) {
-    summary.textContent = err instanceof Error ? err.message : 'Failed to load dashboard';
-    summary.classList.add('summary-error');
+    const message = err instanceof Error ? err.message : 'Failed to load dashboard';
+    healthEl.textContent = 'Unable to load status';
+    healthEl.className = 'health-line health-error';
+    if (errorBanner) {
+      errorBanner.textContent = message;
+      setHidden(errorBanner, false);
+    }
+    setHidden(staleBanner, true);
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 }
 
-void loadDashboard();
+function startRefresh(): void {
+  void loadDashboard();
+
+  window.setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      void loadDashboard();
+    }
+  }, REFRESH_MS);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void loadDashboard();
+    }
+  });
+}
+
+startRefresh();

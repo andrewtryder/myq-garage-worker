@@ -18,8 +18,10 @@ import {
 } from './alert-config';
 import { buildHaDevices, loadAllDoors } from './doors';
 import { buildDashboard } from './dashboard';
+import { buildHealth } from './health';
+import { recordOpsEvent, pruneOpsEvents } from './ops';
 import { isApiKeyAuthorized, routeRequiresApiKey } from './auth';
-import { consumeRateLimit } from './rate-limit';
+import { consumeRateLimit, pruneRateLimits } from './rate-limit';
 import {
   jsonResponse,
   methodNotAllowedResponse,
@@ -33,6 +35,7 @@ export type { Env };
 const ROUTE_METHODS: Record<string, string[]> = {
   '/': ['GET'],
   '/devices': ['GET'],
+  '/health': ['GET'],
   '/api/dashboard': ['GET'],
   '/api/alert-config': ['GET', 'POST'],
   '/api/test-alert': ['POST'],
@@ -79,9 +82,23 @@ async function handleSimulate(request: Request, env: Env): Promise<Response> {
   }
 
   const value = mapActionToStatus(action);
-  await saveDoorState(env, doorKey, value, { source: 'simulate', doorName: deviceName });
+  const result = await saveDoorState(env, doorKey, value, {
+    source: 'simulate',
+    doorName: deviceName,
+  });
+  if (result.applied) {
+    await recordOpsEvent(env, 'door_change', {
+      doorId: doorKey,
+      detail: `${deviceName} → ${value} (simulate)`,
+    });
+  }
 
-  return jsonResponse({ success: true, door: deviceName, state: value });
+  return jsonResponse({
+    success: true,
+    door: deviceName,
+    state: result.state.value,
+    applied: result.applied,
+  });
 }
 
 async function handleAlertConfigGet(env: Env): Promise<Response> {
@@ -136,6 +153,14 @@ async function handleTestAlert(request: Request, env: Env): Promise<Response> {
     typeof body.doorName === 'string' && body.doorName.trim() ? body.doorName.trim() : undefined;
   const result = await testAlert(config, doorName);
 
+  if (result.sent) {
+    await recordOpsEvent(env, 'webhook_ok', { detail: `test-alert ${result.door}` });
+  } else {
+    await recordOpsEvent(env, 'webhook_fail', {
+      detail: result.error || result.skippedReason || `HTTP ${result.webhookStatus ?? '?'}`,
+    });
+  }
+
   return jsonResponse({ result });
 }
 
@@ -145,6 +170,7 @@ export default {
       const sender = typeof message.from === 'string' ? message.from : '';
       if (!isMyQEnvelopeSender(sender)) {
         message.setReject('Unsupported sender');
+        await recordOpsEvent(env, 'email_reject', { detail: 'unsupported_sender' });
         return;
       }
 
@@ -152,11 +178,13 @@ export default {
       const recipient = typeof message.to === 'string' ? message.to : '';
       if (!isAllowedRecipient(recipient, allowedEmailTo)) {
         message.setReject('Unsupported recipient');
+        await recordOpsEvent(env, 'email_reject', { detail: 'unsupported_recipient' });
         return;
       }
 
       if (hasFailedEmailAuthentication(message.headers.get('authentication-results'))) {
         message.setReject('Failed email authentication');
+        await recordOpsEvent(env, 'email_reject', { detail: 'auth_fail' });
         return;
       }
 
@@ -167,6 +195,7 @@ export default {
       const parsed = parseMyQSubject(subject);
       if (!parsed) {
         console.log('Subject did not match MyQ pattern');
+        await recordOpsEvent(env, 'email_reject', { detail: 'subject_mismatch' });
         return;
       }
 
@@ -174,6 +203,7 @@ export default {
       const doorKey = resolveDoorKey(deviceName, env);
       if (!doorKey) {
         console.log('Unknown device name:', deviceName);
+        await recordOpsEvent(env, 'email_reject', { detail: 'unknown_device' });
         return;
       }
 
@@ -185,9 +215,26 @@ export default {
       });
       if (result.duplicate) {
         console.log('Duplicate Message-ID, skipping');
+        await recordOpsEvent(env, 'email_ok', {
+          doorId: doorKey,
+          detail: 'duplicate_message_id',
+        });
+        return;
+      }
+
+      await recordOpsEvent(env, 'email_ok', {
+        doorId: doorKey,
+        detail: `${deviceName} → ${value}`,
+      });
+      if (result.applied) {
+        await recordOpsEvent(env, 'door_change', {
+          doorId: doorKey,
+          detail: `${deviceName} → ${value}`,
+        });
       }
     } catch (err) {
       console.error('Error handling MyQ email:', err);
+      await recordOpsEvent(env, 'email_reject', { detail: 'handler_error' });
     }
   },
 
@@ -197,6 +244,8 @@ export default {
       if (pruned > 0) {
         console.log(`Pruned ${pruned} door_events older than retention window`);
       }
+      await pruneOpsEvents(env);
+      await pruneRateLimits(env);
     } catch (err) {
       console.error('Error pruning old events:', err);
     }
@@ -204,13 +253,28 @@ export default {
     const config = await getAlertConfig(env);
     if (!config) {
       console.log('No alert webhook configured, skipping scheduled alert check.');
+      await recordOpsEvent(env, 'cron_alerts', { detail: 'skipped_no_config' });
       return;
     }
 
     try {
-      await runOpenDoorAlerts(env);
+      const results = await runOpenDoorAlerts(env);
+      const sent = results.filter((result) => result.sent).length;
+      const failed = results.filter(
+        (result) => !result.sent && (result.error || result.webhookStatus),
+      ).length;
+      await recordOpsEvent(env, 'cron_alerts', {
+        detail: `sent=${sent} failed=${failed} checked=${results.length}`,
+      });
+      if (sent > 0) {
+        await recordOpsEvent(env, 'webhook_ok', { detail: `cron sent=${sent}` });
+      }
+      if (failed > 0) {
+        await recordOpsEvent(env, 'webhook_fail', { detail: `cron failed=${failed}` });
+      }
     } catch (err) {
       console.error('Error in scheduled handler:', err);
+      await recordOpsEvent(env, 'cron_alerts', { detail: 'handler_error' });
     }
   },
 
@@ -253,6 +317,11 @@ export default {
 
       if (request.method === 'GET' && route === '/api/dashboard') {
         return jsonResponse(await buildDashboard(env));
+      }
+
+      if (request.method === 'GET' && route === '/health') {
+        const health = await buildHealth(env);
+        return jsonResponse(health, health.d1Ok ? 200 : 503);
       }
 
       if (request.method === 'GET' && route === '/devices') {
