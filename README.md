@@ -14,34 +14,37 @@ For a step-by-step guide on how to configure MyQ, Cloudflare, and email forwardi
 
 ## Architecture
 
-This worker acts as two endpoints:
+This Worker is one deployment with:
 
-1. **Email Routing Handler (`email`)**: Triggered when a myQ notification email is routed to the worker. It parses the sender and subject to extract device action (opened, closed, stopped) and logs the state.
-2. **HTTP Handler (`fetch`)**: Serves a sleek, modern dashboard page displaying the current status of the garage doors retrieved directly from Cloudflare KV.
+1. **Email Routing Handler (`email`)**: Parses myQ notification emails and writes door state to Cloudflare KV.
+2. **Scheduled Handler (`scheduled`)**: Cron checks for left-open doors and fires webhooks.
+3. **HTTP API (`fetch`)**: JSON under `/api/*` plus Home Assistant `GET /devices`.
+4. **Static frontend (Workers Static Assets)**: Vite-built `/` (status) and `/admin` (alerts/simulate), same hostname as the API.
 
 ## Tech Stack
 
-- **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/)
+- **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/) + [Static Assets](https://developers.cloudflare.com/workers/static-assets/)
+- **Frontend**: Vite + vanilla TypeScript
 - **Codebase**: TypeScript, ESLint, Prettier
 - **Storage**: [Cloudflare KV](https://developers.cloudflare.com/kv/)
 
 ## Security (operator responsibility)
 
-**Browser dashboard access is not enforced inside this Worker.** Put the Worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/) with an Allow policy for humans. If Access is missing or misconfigured, anyone who knows the URL can view the dashboard and call Simulator/Alerts endpoints.
+**Browser dashboard access is not enforced inside this Worker.** Put the Worker behind [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/) with an Allow policy for humans. Access should cover `/`, `/admin`, and `/api/*`. If Access is missing or misconfigured, anyone who knows the URL can view the dashboard and call admin APIs.
 
 For Home Assistant (HACS), create a **second** Access application whose public destination is `your-hostname/devices` with a Bypass (Everyone) policy. Worker-destination Access apps (one-click Workers Access) have no path field, so a Bypass on that app would unprotect the whole Worker. Cloudflare lets a more specific `public` destination take precedence. Set the Worker `API_KEY` secret — after the bypass, that key is the **only** guard on `/devices`. The integration sends `Authorization: Bearer YOUR_API_KEY`. Without `API_KEY`, `/devices` returns 401.
 
-Dashboard `POST /alert-config` and `POST /test-alert` include a soft Worker-side rate limit (UX only; fails open). For abuse prevention, configure Cloudflare Rate Limiting / WAF on those routes. See [SECURITY.md](SECURITY.md).
+Dashboard `POST /api/alert-config` and `POST /api/test-alert` include a soft Worker-side rate limit (UX only; fails open). For abuse prevention, configure Cloudflare Rate Limiting / WAF on those routes. See [SECURITY.md](SECURITY.md).
 
 ## Environment Variables / Configuration
 
 The environment variable `GARAGE_DOORS` must be provided at deployment time or in the Cloudflare dashboard. We do not hardcode this in `wrangler.jsonc` to allow dynamic CI/CD deployments.
 
-| Variable Name      | Description                                                                                                                                                                |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                  |
-| `API_KEY`          | Secret required for machine status APIs (`GET /devices`, `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard (use Access). |
-| `ALLOWED_EMAIL_TO` | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                     |
+| Variable Name      | Description                                                                                                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                |
+| `API_KEY`          | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
+| `ALLOWED_EMAIL_TO` | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
 
 **Example configuration:**
 
@@ -77,13 +80,14 @@ For a detailed step-by-step guide including Cloudflare Email Routing and myQ con
    npm install
    ```
 
-2. Boot the local development server (remotely proxying to Cloudflare APIs):
+2. Build the frontend once (or use `npm run frontend:dev` in a second terminal with Vite’s proxy to wrangler):
 
    ```bash
+   npm run frontend:build
    npm run dev
    ```
 
-3. Open `http://localhost:8787` to view the local instance of the status page.
+3. Open `http://localhost:8787` for status and `/admin` for alerts/simulate.
 
 ## Testing Live Deployments
 
@@ -91,11 +95,11 @@ To ensure your dashboard UI updates correctly without having to open/close your 
 
 ### Option 1: Web UI Simulator
 
-Open your Access-protected worker URL in a browser. Switch to the **Simulator** tab, choose a configured door from the dropdown, and pick an action (opened, closed, stopped).
+Open your Access-protected worker URL, go to **Admin**, choose a configured door, and pick an action (opened, closed, stopped).
 
-### Option 2: Alerts tab
+### Option 2: Alerts on Admin
 
-Switch to the **Alerts** tab to configure a left-open webhook (stored in KV, used by the cron job every 15 minutes):
+On **Admin**, configure a left-open webhook (stored in KV, used by the cron job every 15 minutes):
 
 - **Webhook URL** — HTTPS only (ntfy, Pushover, Apprise, etc.; use a secret topic URL). Private/localhost destinations are rejected.
 - **Threshold (minutes)** — how long a door must be open before alerting
@@ -204,7 +208,9 @@ The integration calls `GET /devices`, which returns:
 
 `id` is the stable KV key from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
 
-**Advanced / fallback:** `GET /?json=true` (requires `API_KEY`) returns `{ "doors": [...], "history": [...] }` for manual REST sensor setups. `GET /?json=true` remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Use `/devices`, an Access service token, or a dedicated `/api/status` route instead. Prefer `GET /devices` for Home Assistant:
+**Browser dashboard:** `GET /api/dashboard` (Access-protected, no `API_KEY`) returns door status and recent events for the static UI.
+
+**Deprecated:** `GET /?json=true` (requires `API_KEY`) still returns `{ "doors": [...], "history": [...] }` for older REST setups. Prefer `GET /devices` or `GET /api/dashboard`. Do not create an Access Bypass for `/`.
 
 ```json
 {

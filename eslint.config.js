@@ -4,7 +4,7 @@ import prettier from 'eslint-config-prettier';
 
 export default ts.config(
   {
-    ignores: ['.wrangler/**', 'dist/**', '.git/**'],
+    ignores: ['.wrangler/**', 'dist/**', '.git/**', 'frontend/dist/**'],
   },
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -15,6 +15,16 @@ export default ts.config(
         console: 'readonly',
         fetch: 'readonly',
         globalThis: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        HTMLElement: 'readonly',
+        HTMLInputElement: 'readonly',
+        HTMLSelectElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        HTMLFormElement: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
       },
     },
     rules: {

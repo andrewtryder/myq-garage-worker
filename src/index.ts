@@ -14,7 +14,6 @@ import {
   parseMyQSubject,
   resolveDoorKey,
 } from './email-parser';
-import { renderStatusPage } from './status-page';
 import { runOpenDoorAlerts, testAlert } from './alerts';
 import {
   getAlertConfig,
@@ -23,10 +22,10 @@ import {
   toPublicAlertConfig,
 } from './alert-config';
 import { buildHaDevices, loadAllDoors } from './doors';
+import { buildDashboard } from './dashboard';
 import { isApiKeyAuthorized, routeRequiresApiKey } from './auth';
 import { consumeRateLimit } from './rate-limit';
 import {
-  htmlResponse,
   jsonResponse,
   methodNotAllowedResponse,
   notFoundResponse,
@@ -39,6 +38,11 @@ export type { Env };
 const ROUTE_METHODS: Record<string, string[]> = {
   '/': ['GET'],
   '/devices': ['GET'],
+  '/api/dashboard': ['GET'],
+  '/api/alert-config': ['GET', 'POST'],
+  '/api/test-alert': ['POST'],
+  '/api/simulate': ['POST'],
+  // Legacy aliases (prefer /api/*)
   '/simulate': ['POST'],
   '/alert-config': ['POST'],
   '/test-alert': ['POST'],
@@ -47,6 +51,97 @@ const ROUTE_METHODS: Record<string, string[]> = {
 function matchRoute(pathname: string): string | null {
   if (pathname in ROUTE_METHODS) return pathname;
   return null;
+}
+
+async function handleSimulate(request: Request, env: Env): Promise<Response> {
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+
+  const body = parsedBody.value as {
+    subject?: string;
+    deviceName?: string;
+    action?: string;
+  };
+
+  let deviceName = body.deviceName;
+  let action = body.action;
+
+  if (body.subject) {
+    const parsed = parseMyQSubject(body.subject);
+    if (parsed) {
+      deviceName = parsed.deviceName;
+      action = parsed.action;
+    }
+  }
+
+  if (!deviceName || !action) {
+    return jsonResponse({ error: 'Missing deviceName or action (or valid subject)' }, 400);
+  }
+
+  const doorKey = resolveDoorKey(deviceName, env);
+  if (!doorKey) {
+    return jsonResponse({ error: `Unknown device name: ${deviceName}` }, 404);
+  }
+
+  const value = mapActionToStatus(action);
+  await saveDoorState(env, doorKey, value);
+
+  return jsonResponse({ success: true, door: deviceName, state: value });
+}
+
+async function handleAlertConfigGet(env: Env): Promise<Response> {
+  const config = await getAlertConfig(env);
+  return jsonResponse({
+    config: toPublicAlertConfig(config),
+    doorNames: Object.keys(loadConfig(env).garageDoors),
+  });
+}
+
+async function handleAlertConfigPost(request: Request, env: Env): Promise<Response> {
+  const rate = await consumeRateLimit(env, 'alert-config');
+  if (!rate.allowed) {
+    return jsonResponse({ error: 'Too many requests' }, 429);
+  }
+
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+
+  try {
+    const body = parsedBody.value as Record<string, unknown>;
+    const saved = await getAlertConfig(env);
+    const merged = resolveAlertConfigFromBody(body, saved);
+    if (!merged) {
+      return jsonResponse({ error: 'Invalid alert configuration' }, 400);
+    }
+    const config = await saveAlertConfig(env, merged);
+    return jsonResponse({ success: true, config: toPublicAlertConfig(config) });
+  } catch {
+    return jsonResponse({ error: 'Invalid alert configuration' }, 400);
+  }
+}
+
+async function handleTestAlert(request: Request, env: Env): Promise<Response> {
+  const rate = await consumeRateLimit(env, 'test-alert');
+  if (!rate.allowed) {
+    return jsonResponse({ error: 'Too many requests' }, 429);
+  }
+
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+
+  const body = parsedBody.value as Record<string, unknown>;
+  const saved = await getAlertConfig(env);
+  const config = resolveAlertConfigFromBody(body, saved);
+
+  if (!config) {
+    return jsonResponse({ error: 'Invalid alert configuration' }, 400);
+  }
+
+  const doorName =
+    typeof body.doorName === 'string' && body.doorName.trim() ? body.doorName.trim() : undefined;
+  const result = await testAlert(config, doorName);
+
+  return jsonResponse({ result });
 }
 
 export default {
@@ -139,120 +234,45 @@ export default {
         return textResponse('Unauthorized', 401);
       }
 
-      if (request.method === 'POST' && url.pathname === '/simulate') {
-        const parsedBody = await readJsonBody(request);
-        if (!parsedBody.ok) return parsedBody.response;
-
-        const body = parsedBody.value as {
-          subject?: string;
-          deviceName?: string;
-          action?: string;
-        };
-
-        let deviceName = body.deviceName;
-        let action = body.action;
-
-        if (body.subject) {
-          const parsed = parseMyQSubject(body.subject);
-          if (parsed) {
-            deviceName = parsed.deviceName;
-            action = parsed.action;
-          }
-        }
-
-        if (!deviceName || !action) {
-          return jsonResponse({ error: 'Missing deviceName or action (or valid subject)' }, 400);
-        }
-
-        const doorKey = resolveDoorKey(deviceName, env);
-        if (!doorKey) {
-          return jsonResponse({ error: `Unknown device name: ${deviceName}` }, 404);
-        }
-
-        const value = mapActionToStatus(action);
-        await saveDoorState(env, doorKey, value);
-
-        return jsonResponse({ success: true, door: deviceName, state: value });
+      if (request.method === 'POST' && (route === '/api/simulate' || route === '/simulate')) {
+        return handleSimulate(request, env);
       }
 
-      if (request.method === 'POST' && url.pathname === '/alert-config') {
-        const rate = await consumeRateLimit(env, 'alert-config');
-        if (!rate.allowed) {
-          return jsonResponse({ error: 'Too many requests' }, 429);
-        }
-
-        const parsedBody = await readJsonBody(request);
-        if (!parsedBody.ok) return parsedBody.response;
-
-        try {
-          const body = parsedBody.value as Record<string, unknown>;
-          const saved = await getAlertConfig(env);
-          const merged = resolveAlertConfigFromBody(body, saved);
-          if (!merged) {
-            return jsonResponse({ error: 'Invalid alert configuration' }, 400);
-          }
-          const config = await saveAlertConfig(env, merged);
-          return jsonResponse({ success: true, config: toPublicAlertConfig(config) });
-        } catch {
-          return jsonResponse({ error: 'Invalid alert configuration' }, 400);
-        }
+      if (request.method === 'GET' && route === '/api/alert-config') {
+        return handleAlertConfigGet(env);
       }
 
-      if (request.method === 'POST' && url.pathname === '/test-alert') {
-        const rate = await consumeRateLimit(env, 'test-alert');
-        if (!rate.allowed) {
-          return jsonResponse({ error: 'Too many requests' }, 429);
-        }
-
-        const parsedBody = await readJsonBody(request);
-        if (!parsedBody.ok) return parsedBody.response;
-
-        const body = parsedBody.value as Record<string, unknown>;
-        const saved = await getAlertConfig(env);
-        const config = resolveAlertConfigFromBody(body, saved);
-
-        if (!config) {
-          return jsonResponse({ error: 'Invalid alert configuration' }, 400);
-        }
-
-        const doorName =
-          typeof body.doorName === 'string' && body.doorName.trim()
-            ? body.doorName.trim()
-            : undefined;
-        const result = await testAlert(config, doorName);
-
-        return jsonResponse({ result });
+      if (
+        request.method === 'POST' &&
+        (route === '/api/alert-config' || route === '/alert-config')
+      ) {
+        return handleAlertConfigPost(request, env);
       }
 
-      if (request.method === 'GET' && url.pathname === '/devices') {
+      if (request.method === 'POST' && (route === '/api/test-alert' || route === '/test-alert')) {
+        return handleTestAlert(request, env);
+      }
+
+      if (request.method === 'GET' && route === '/api/dashboard') {
+        return jsonResponse(await buildDashboard(env));
+      }
+
+      if (request.method === 'GET' && route === '/devices') {
         const { allDoorData } = await loadAllDoors(env);
         const devices = buildHaDevices(allDoorData);
         return jsonResponse(devices);
       }
 
-      // GET /
-      const { allDoorData, doors, combinedHistory } = await loadAllDoors(env);
-
+      // GET / — deprecated JSON or static assets
       if (url.searchParams.get('json') === 'true') {
+        const { doors, combinedHistory } = await loadAllDoors(env);
         return jsonResponse({ doors, history: combinedHistory });
       }
 
-      const openDoorNames = allDoorData
-        .filter((door) => door.state.value === 'OPEN')
-        .map((door) => door.name);
-
-      const alertConfig = await getAlertConfig(env);
-
-      const html = renderStatusPage(doors, combinedHistory, {
-        doorNames: allDoorData.map((door) => door.name),
-        openDoorNames,
-        alertConfig,
-      });
-
-      return htmlResponse(html);
+      return env.ASSETS.fetch(request);
     } catch (err) {
-      console.error('Error handling fetch request:', err);
-      return textResponse('Error rendering status page', 500);
+      console.error('Error handling request:', err);
+      return jsonResponse({ error: 'Internal Server Error' }, 500);
     }
   },
 };
