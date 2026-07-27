@@ -95,7 +95,7 @@ export async function saveDoorState(
   }
 
   const statements: D1PreparedStatement[] = [];
-  let updateIndex = -1;
+  let updateIndex: number;
 
   if (messageIdHash) {
     statements.push(
