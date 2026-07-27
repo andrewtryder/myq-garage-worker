@@ -11,6 +11,11 @@ export interface Env {
   VERSION?: string;
   /** Hours without a door event before status is considered stale (default 48). */
   STALE_AFTER_HOURS?: string | number;
+  /**
+   * Max |email Date − Worker receipt| hours to trust Date for chronology (default 6).
+   * Outside this window, received_at is used for ordering.
+   */
+  EVENT_TIME_SKEW_HOURS?: string | number;
 }
 
 export type DoorStatus = 'OPEN' | 'CLOSED' | 'STOPPED' | 'UNKNOWN';

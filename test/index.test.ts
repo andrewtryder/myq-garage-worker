@@ -133,6 +133,62 @@ describe('myq-garage-worker integration tests', () => {
       await worker.email(message, mockEnv, {} as any);
       expect(d1State.doors.get('garage-left')?.current_status).toBe('CLOSED');
     });
+
+    it('does not apply a delayed older Date after a newer email', async () => {
+      const mockEnv: any = baseEnv({
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        EVENT_TIME_SKEW_HOURS: '6',
+      });
+
+      const newer: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'message-id': '<open-newer@example.com>',
+          date: 'Mon, 27 Jul 2026 15:00:00 -0400', // 19:00Z
+        }),
+      };
+      await worker.email(newer, mockEnv, {} as any);
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+      expect(d1State.doors.get('garage-left')?.updated_at).toBe('2026-07-27T19:00:00.000Z');
+
+      const delayedOlder: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just closed',
+          'message-id': '<close-older@example.com>',
+          date: 'Mon, 27 Jul 2026 14:00:00 -0400', // 18:00Z
+        }),
+      };
+      await worker.email(delayedOlder, mockEnv, {} as any);
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+      expect(d1State.door_events).toHaveLength(2);
+    });
+
+    it('falls back to receipt time when Date is outside skew', async () => {
+      const mockEnv: any = baseEnv({
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+        EVENT_TIME_SKEW_HOURS: '1',
+      });
+
+      const message: any = {
+        from: 'notification@myq.com',
+        setReject: vi.fn(),
+        headers: new Headers({
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'message-id': '<skew@example.com>',
+          // Far past relative to Worker now — outside 1h skew
+          date: 'Sun, 26 Jul 2026 08:00:00 -0400',
+        }),
+      };
+      await worker.email(message, mockEnv, {} as any);
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+      const event = d1State.door_events[0];
+      expect(event.occurred_at).toBe(event.received_at);
+      expect(event.occurred_at).not.toBe('2026-07-26T12:00:00.000Z');
+    });
   });
 
   describe('Fetch Handler (HTTP UI)', () => {

@@ -1,10 +1,12 @@
 import { DoorStatus, Env } from './types';
+import { DEFAULT_EVENT_TIME_SKEW_HOURS } from './email-time';
 
 export interface AppConfig {
   garageDoors: Readonly<Record<string, string>>;
   apiKey: string | undefined;
   allowedEmailTo: string | undefined;
   staleAfterHours: number;
+  eventTimeSkewHours: number;
 }
 
 const DEFAULT_STALE_AFTER_HOURS = 48;
@@ -98,7 +100,7 @@ export function parseGarageDoors(raw: Env['GARAGE_DOORS'] | undefined): Record<s
   }
 }
 
-export function parseStaleAfterHours(raw: Env['STALE_AFTER_HOURS'] | undefined): number {
+function parsePositiveHours(raw: string | number | undefined, fallback: number): number {
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
     return Math.floor(raw);
   }
@@ -108,7 +110,15 @@ export function parseStaleAfterHours(raw: Env['STALE_AFTER_HOURS'] | undefined):
       return Math.floor(parsed);
     }
   }
-  return DEFAULT_STALE_AFTER_HOURS;
+  return fallback;
+}
+
+export function parseStaleAfterHours(raw: Env['STALE_AFTER_HOURS'] | undefined): number {
+  return parsePositiveHours(raw, DEFAULT_STALE_AFTER_HOURS);
+}
+
+export function parseEventTimeSkewHours(raw: Env['EVENT_TIME_SKEW_HOURS'] | undefined): number {
+  return parsePositiveHours(raw, DEFAULT_EVENT_TIME_SKEW_HOURS);
 }
 
 export function loadConfig(env: Env): AppConfig {
@@ -122,6 +132,7 @@ export function loadConfig(env: Env): AppConfig {
     apiKey: typeof env.API_KEY === 'string' && env.API_KEY.length > 0 ? env.API_KEY : undefined,
     allowedEmailTo,
     staleAfterHours: parseStaleAfterHours(env.STALE_AFTER_HOURS),
+    eventTimeSkewHours: parseEventTimeSkewHours(env.EVENT_TIME_SKEW_HOURS),
   });
 }
 

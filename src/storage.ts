@@ -38,6 +38,11 @@ export interface SaveDoorOptions {
   messageId?: string | null;
   source?: string;
   doorName?: string;
+  /**
+   * Chronology/ordering timestamp (ISO). Defaults to Worker receipt time.
+   * For email, pass trusted Date-within-skew or received_at fallback.
+   */
+  occurredAt?: string;
 }
 
 export interface SaveDoorResult {
@@ -69,6 +74,7 @@ export async function readDoorStateOrThrow(env: Env, doorKey: string): Promise<D
 /**
  * Persist a door state change and append history in one D1 batch.
  * When messageId is set, unique hash enforces deduplication — duplicate returns without mutating state.
+ * Chronology uses occurredAt (ordering time); received_at is always Worker receipt.
  */
 export async function saveDoorState(
   env: Env,
@@ -77,12 +83,18 @@ export async function saveDoorState(
   options: SaveDoorOptions = {},
 ): Promise<SaveDoorResult> {
   const source = options.source ?? 'manual';
-  const now = new Date().toISOString();
-  await ensureDoor(env, doorKey, options.doorName, now);
+  const receivedAt = new Date().toISOString();
+  const occurredAt =
+    typeof options.occurredAt === 'string' && options.occurredAt.trim()
+      ? options.occurredAt.trim()
+      : receivedAt;
+  await ensureDoor(env, doorKey, options.doorName, occurredAt);
 
   const existing = await readDoorStateOrThrow(env, doorKey);
   const createdAt =
-    value === 'OPEN' && existing.value === 'OPEN' && existing.createdAt ? existing.createdAt : now;
+    value === 'OPEN' && existing.value === 'OPEN' && existing.createdAt
+      ? existing.createdAt
+      : occurredAt;
   const newState: DoorState = { value, createdAt };
   const stateSince = createdAt || null;
 
@@ -100,9 +112,9 @@ export async function saveDoorState(
   if (messageIdHash) {
     statements.push(
       env.GARAGE_DB.prepare(
-        `INSERT OR IGNORE INTO door_events (door_id, status, occurred_at, message_id_hash, source)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).bind(doorKey, value, now, messageIdHash, source),
+        `INSERT OR IGNORE INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).bind(doorKey, value, occurredAt, receivedAt, messageIdHash, source),
     );
     updateIndex = statements.length;
     statements.push(
@@ -115,16 +127,16 @@ export async function saveDoorState(
              SELECT 1 FROM door_events
              WHERE message_id_hash = ? AND occurred_at = ?
            )`,
-      ).bind(value, stateSince, now, doorKey, now, messageIdHash, now),
+      ).bind(value, stateSince, occurredAt, doorKey, occurredAt, messageIdHash, occurredAt),
     );
   } else {
     const shouldAppend = !(value === existing.value && createdAt === existing.createdAt);
     if (shouldAppend) {
       statements.push(
         env.GARAGE_DB.prepare(
-          `INSERT INTO door_events (door_id, status, occurred_at, message_id_hash, source)
-           VALUES (?, ?, ?, NULL, ?)`,
-        ).bind(doorKey, value, now, source),
+          `INSERT INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source)
+           VALUES (?, ?, ?, ?, NULL, ?)`,
+        ).bind(doorKey, value, occurredAt, receivedAt, source),
       );
     }
     updateIndex = statements.length;
@@ -134,7 +146,7 @@ export async function saveDoorState(
          SET current_status = ?, state_since = ?, updated_at = ?
          WHERE id = ?
            AND (updated_at IS NULL OR updated_at <= ?)`,
-      ).bind(value, stateSince, now, doorKey, now),
+      ).bind(value, stateSince, occurredAt, doorKey, occurredAt),
     );
   }
 
@@ -149,7 +161,7 @@ export async function saveDoorState(
                AND current_status = ?
                AND updated_at = ?
            )`,
-      ).bind(doorKey, doorKey, value, now),
+      ).bind(doorKey, doorKey, value, occurredAt),
     );
   }
 

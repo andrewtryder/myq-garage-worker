@@ -76,6 +76,41 @@ describe('storage D1 tests', () => {
       expect(result.state.value).toBe('OPEN');
       expect((await getDoorState(mockEnv, 'garage-left')).value).toBe('OPEN');
     });
+
+    it('stores received_at separately from ordering occurred_at', async () => {
+      const occurredAt = '2026-07-27T18:00:00.000Z';
+      await saveDoorState(mockEnv, 'garage-left', 'OPEN', {
+        source: 'email',
+        messageId: '<recv@example.com>',
+        occurredAt,
+      });
+      const event = d1State.door_events.find(
+        (row: any) => row.message_id_hash && row.door_id === 'garage-left',
+      );
+      expect(event.occurred_at).toBe(occurredAt);
+      expect(event.received_at).toBeTruthy();
+      expect(event.received_at).not.toBe(occurredAt);
+      expect(d1State.doors.get('garage-left').updated_at).toBe(occurredAt);
+    });
+
+    it('rejects delayed older event when a newer occurred_at already won', async () => {
+      const newer = await saveDoorState(mockEnv, 'garage-left', 'OPEN', {
+        source: 'email',
+        messageId: '<newer@example.com>',
+        occurredAt: '2026-07-27T19:00:00.000Z',
+      });
+      expect(newer.applied).toBe(true);
+
+      const delayedOlder = await saveDoorState(mockEnv, 'garage-left', 'CLOSED', {
+        source: 'email',
+        messageId: '<older@example.com>',
+        occurredAt: '2026-07-27T18:00:00.000Z',
+      });
+      expect(delayedOlder.applied).toBe(false);
+      expect(delayedOlder.state.value).toBe('OPEN');
+      expect(d1State.doors.get('garage-left').current_status).toBe('OPEN');
+      expect(d1State.door_events).toHaveLength(2);
+    });
   });
 
   describe('getDoorHistory', () => {
