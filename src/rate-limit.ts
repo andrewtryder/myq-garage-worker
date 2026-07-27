@@ -8,25 +8,31 @@ export async function consumeRateLimit(
   bucket: string,
   limit = DEFAULT_LIMIT,
 ): Promise<{ allowed: boolean; remaining: number }> {
-  const windowId = Math.floor(Date.now() / (WINDOW_SECONDS * 1000));
-  const key = `ratelimit:${bucket}:${windowId}`;
+  const windowId = String(Math.floor(Date.now() / (WINDOW_SECONDS * 1000)));
 
   try {
-    const raw = await env.GARAGE_STATE.get(key);
-    const current = raw ? parseInt(raw, 10) : 0;
-    const count = Number.isFinite(current) ? current : 0;
+    const row = await env.GARAGE_DB.prepare(
+      `SELECT count FROM rate_limits WHERE bucket = ? AND window_id = ?`,
+    )
+      .bind(bucket, windowId)
+      .first<{ count: number }>();
 
+    const count = row?.count ?? 0;
     if (count >= limit) {
       return { allowed: false, remaining: 0 };
     }
 
-    await env.GARAGE_STATE.put(key, String(count + 1), {
-      expirationTtl: WINDOW_SECONDS * 2,
-    });
+    await env.GARAGE_DB.prepare(
+      `INSERT INTO rate_limits (bucket, window_id, count)
+       VALUES (?, ?, 1)
+       ON CONFLICT(bucket, window_id) DO UPDATE SET count = count + 1`,
+    )
+      .bind(bucket, windowId)
+      .run();
+
     return { allowed: true, remaining: Math.max(0, limit - count - 1) };
   } catch (err) {
     console.error('Rate limit check failed:', err);
-    // Fail open on KV errors so alerts/config are not bricked.
     return { allowed: true, remaining: limit };
   }
 }

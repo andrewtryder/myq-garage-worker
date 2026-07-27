@@ -1,25 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildDashboard } from '../src/dashboard';
-import { createMockKv } from './mock-kv';
+import { createMockD1 } from './mock-d1';
 
 describe('buildDashboard', () => {
-  let mockKV: any;
+  let mockDb: any;
+  let state: any;
 
   beforeEach(() => {
-    ({ mockKV } = createMockKv());
+    ({ mockDb, state } = createMockD1());
   });
 
-  it('returns stable dashboard shape from KV door state', async () => {
+  it('returns stable dashboard shape from D1 door state', async () => {
     const now = Date.parse('2026-07-26T21:30:00.000Z');
-    await mockKV.put(
-      'garage-left',
-      JSON.stringify({ value: 'CLOSED', createdAt: '2026-07-26T19:10:00.000Z' }),
-    );
+    state.doors.set('garage-left', {
+      id: 'garage-left',
+      name: 'Garage Door Left',
+      current_status: 'CLOSED',
+      state_since: '2026-07-26T19:10:00.000Z',
+      updated_at: '2026-07-26T19:10:00.000Z',
+    });
 
     const result = await buildDashboard(
       {
-        GARAGE_STATE: mockKV,
+        GARAGE_DB: mockDb,
         ASSETS: { fetch: vi.fn() } as any,
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
       },

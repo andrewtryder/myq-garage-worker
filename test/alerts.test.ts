@@ -2,13 +2,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runOpenDoorAlerts, sendWebhook, testAlert } from '../src/alerts';
 import { AlertConfig } from '../src/alert-config';
-import { createMockKv } from './mock-kv';
+import { createMockD1 } from './mock-d1';
 
 const sampleConfig: AlertConfig = {
   webhookUrl: 'https://example.com/webhook',
   thresholdMinutes: 60,
   method: 'POST',
 };
+
+function envWithOpenDoor(
+  createdAt: string,
+  extraState?: (state: any) => void,
+): { env: any; state: any; mockDb: any } {
+  const { mockDb, state } = createMockD1();
+  state.doors.set('garage-left', {
+    id: 'garage-left',
+    name: 'Garage Door Left',
+    current_status: 'OPEN',
+    state_since: createdAt,
+    updated_at: createdAt,
+  });
+  extraState?.(state);
+  return {
+    mockDb,
+    state,
+    env: {
+      GARAGE_DB: mockDb,
+      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+    },
+  };
+}
 
 describe('alerts', () => {
   beforeEach(() => {
@@ -28,31 +51,15 @@ describe('alerts', () => {
   });
 
   it('returns not configured when alert config is missing', async () => {
-    const { mockKV } = createMockKv();
-    const results = await runOpenDoorAlerts({ GARAGE_STATE: mockKV } as any);
+    const { mockDb } = createMockD1();
+    const results = await runOpenDoorAlerts({ GARAGE_DB: mockDb } as any);
     expect(results).toEqual([
       { door: '', sent: false, skippedReason: 'Alert webhook not configured' },
     ]);
   });
 
   it('sends alert when door has been open past threshold', async () => {
-    const { mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2020-01-01T00:00:00.000Z',
-          }),
-        ],
-      ]),
-    );
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
-
+    const { env } = envWithOpenDoor('2020-01-01T00:00:00.000Z');
     const results = await runOpenDoorAlerts(env, {
       config: sampleConfig,
       nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
@@ -64,22 +71,7 @@ describe('alerts', () => {
   });
 
   it('does not re-send on subsequent runs for the same open session', async () => {
-    const { store, mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2020-01-01T00:00:00.000Z',
-          }),
-        ],
-      ]),
-    );
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
+    const { env, state } = envWithOpenDoor('2020-01-01T00:00:00.000Z');
 
     const first = await runOpenDoorAlerts(env, {
       config: sampleConfig,
@@ -93,33 +85,17 @@ describe('alerts', () => {
     });
     expect(second[0].sent).toBe(false);
     expect(second[0].skippedReason).toContain('already sent');
-    expect(store.has('alert-latch:garage-left')).toBe(true);
+    expect(state.alert_state.has('garage-left')).toBe(true);
   });
 
   it('sends a reminder after reminderMinutes', async () => {
-    const { mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2020-01-01T00:00:00.000Z',
-          }),
-        ],
-        [
-          'alert-latch:garage-left',
-          JSON.stringify({
-            openCreatedAt: '2020-01-01T00:00:00.000Z',
-            lastAlertSentAt: '2025-01-01T11:00:00.000Z',
-          }),
-        ],
-      ]),
-    );
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
+    const { env } = envWithOpenDoor('2020-01-01T00:00:00.000Z', (state) => {
+      state.alert_state.set('garage-left', {
+        door_id: 'garage-left',
+        open_since: '2020-01-01T00:00:00.000Z',
+        last_alert_sent_at: '2025-01-01T11:00:00.000Z',
+      });
+    });
 
     const results = await runOpenDoorAlerts(env, {
       config: { ...sampleConfig, reminderMinutes: 30 },
@@ -130,23 +106,7 @@ describe('alerts', () => {
   });
 
   it('skips alert when door has not been open long enough', async () => {
-    const { mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2025-01-01T11:30:00.000Z',
-          }),
-        ],
-      ]),
-    );
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
-
+    const { env } = envWithOpenDoor('2025-01-01T11:30:00.000Z');
     const results = await runOpenDoorAlerts(env, {
       config: sampleConfig,
       nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
@@ -212,29 +172,13 @@ describe('alerts', () => {
   });
 
   it('sends again after close then reopen clears the latch', async () => {
-    const { store, mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2020-01-01T00:00:00.000Z',
-          }),
-        ],
-        [
-          'alert-latch:garage-left',
-          JSON.stringify({
-            openCreatedAt: '2020-01-01T00:00:00.000Z',
-            lastAlertSentAt: '2025-01-01T11:00:00.000Z',
-          }),
-        ],
-      ]),
-    );
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
+    const { env, state } = envWithOpenDoor('2020-01-01T00:00:00.000Z', (s) => {
+      s.alert_state.set('garage-left', {
+        door_id: 'garage-left',
+        open_since: '2020-01-01T00:00:00.000Z',
+        last_alert_sent_at: '2025-01-01T11:00:00.000Z',
+      });
+    });
 
     const skipped = await runOpenDoorAlerts(env, {
       config: sampleConfig,
@@ -242,15 +186,14 @@ describe('alerts', () => {
     });
     expect(skipped[0].sent).toBe(false);
 
-    // Simulate door close clearing latch (storage.saveDoorState behavior)
-    store.delete('alert-latch:garage-left');
-    store.set(
-      'garage-left',
-      JSON.stringify({
-        value: 'OPEN',
-        createdAt: '2025-01-01T12:30:00.000Z',
-      }),
-    );
+    state.alert_state.delete('garage-left');
+    state.doors.set('garage-left', {
+      id: 'garage-left',
+      name: 'Garage Door Left',
+      current_status: 'OPEN',
+      state_since: '2025-01-01T12:30:00.000Z',
+      updated_at: '2025-01-01T12:30:00.000Z',
+    });
 
     const afterReopen = await runOpenDoorAlerts(env, {
       config: sampleConfig,
@@ -260,28 +203,20 @@ describe('alerts', () => {
   });
 
   it('reports webhook success even when latch persistence fails', async () => {
-    const { mockKV } = createMockKv(
-      new Map([
-        [
-          'garage-left',
-          JSON.stringify({
-            value: 'OPEN',
-            createdAt: '2020-01-01T00:00:00.000Z',
+    const { env, mockDb } = envWithOpenDoor('2020-01-01T00:00:00.000Z');
+    const originalPrepare = mockDb.prepare.getMockImplementation();
+    mockDb.prepare.mockImplementation((sql: string) => {
+      if (sql.includes('INSERT INTO alert_state')) {
+        return {
+          bind: () => ({
+            run: async () => {
+              throw new Error('d1 write failed');
+            },
           }),
-        ],
-      ]),
-    );
-    mockKV.put.mockImplementation((key: string, _value: string) => {
-      if (key.startsWith('alert-latch:')) {
-        return Promise.reject(new Error('kv write failed'));
+        };
       }
-      return Promise.resolve();
+      return originalPrepare(sql);
     });
-
-    const env: any = {
-      GARAGE_STATE: mockKV,
-      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
-    };
 
     const results = await runOpenDoorAlerts(env, {
       config: sampleConfig,

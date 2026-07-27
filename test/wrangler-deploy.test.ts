@@ -14,10 +14,12 @@ const BASE_WRANGLER = `{
   "vars": {
     "VERSION": "0.1.8"
   },
-  "kv_namespaces": [
+  "d1_databases": [
     {
-      "binding": "GARAGE_STATE",
-      "id": "<YOUR_KV_NAMESPACE_ID>"
+      "binding": "GARAGE_DB",
+      "database_name": "myq-garage",
+      "database_id": "<YOUR_D1_DATABASE_ID>",
+      "migrations_dir": "migrations"
     }
   ]
 }
@@ -39,12 +41,12 @@ describe('injectDeployVars', () => {
 
   it('writes valid JSON string GARAGE_DOORS into wrangler.jsonc', () => {
     injectDeployVars(wranglerPath, {
-      kvNamespaceId: 'abc123',
+      d1DatabaseId: 'f25d59dc-73a8-4b6b-bcf0-58f052aa4d1e',
       garageDoors: { 'Garage Door Left': 'garage-left', 'Garage Door Right': 'garage-right' },
     });
 
     const content = fs.readFileSync(wranglerPath, 'utf8');
-    expect(content).toContain('"id": "abc123"');
+    expect(content).toContain('"database_id": "f25d59dc-73a8-4b6b-bcf0-58f052aa4d1e"');
     expect(content).toContain('"GARAGE_DOORS"');
 
     const match = content.match(/"GARAGE_DOORS"\s*:\s*("(?:\\.|[^"\\])*")/);
@@ -68,7 +70,7 @@ describe('injectDeployVars', () => {
     const original = fs.readFileSync(wranglerPath, 'utf8');
     const tmpPath = writeDeployConfig({
       sourcePath: wranglerPath,
-      kvNamespaceId: 'abc123',
+      d1DatabaseId: 'f25d59dc-73a8-4b6b-bcf0-58f052aa4d1e',
       garageDoors: { 'Garage Door Left': 'garage-left' },
     });
 
@@ -77,7 +79,9 @@ describe('injectDeployVars', () => {
     expect(path.dirname(tmpPath)).toBe(path.dirname(wranglerPath));
     expect(path.basename(tmpPath)).toMatch(/^\.wrangler\.deploy\./);
     expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"GARAGE_DOORS"');
-    expect(fs.readFileSync(tmpPath, 'utf8')).toContain('"id": "abc123"');
+    expect(fs.readFileSync(tmpPath, 'utf8')).toContain(
+      '"database_id": "f25d59dc-73a8-4b6b-bcf0-58f052aa4d1e"',
+    );
     fs.unlinkSync(tmpPath);
   });
 });

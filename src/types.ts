@@ -1,5 +1,6 @@
 export interface Env {
-  GARAGE_STATE: KVNamespace;
+  /** D1 database for doors, events, alerts, and rate limits. */
+  GARAGE_DB: D1Database;
   /** Static frontend assets (Workers Static Assets binding). */
   ASSETS: Fetcher;
   GARAGE_DOORS: Record<string, string> | string;

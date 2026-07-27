@@ -7,7 +7,7 @@ import {
   resolveAlertConfigFromBody,
   toPublicAlertConfig,
 } from '../src/alert-config';
-import { createMockKv } from './mock-kv';
+import { createMockD1 } from './mock-d1';
 
 describe('alert-config', () => {
   it('validates a complete alert config', () => {
@@ -51,9 +51,9 @@ describe('alert-config', () => {
     ).toBeNull();
   });
 
-  it('reads and writes config in KV', async () => {
-    const { mockKV } = createMockKv();
-    const env: any = { GARAGE_STATE: mockKV };
+  it('reads and writes config in D1', async () => {
+    const { mockDb } = createMockD1();
+    const env: any = { GARAGE_DB: mockDb };
 
     expect(await getAlertConfig(env)).toBeNull();
 
@@ -123,15 +123,25 @@ describe('alert-config', () => {
     ).toMatchObject({ reminderMinutes: 15 });
   });
 
-  it('returns null from getAlertConfig on malformed KV JSON', async () => {
-    const { mockKV } = createMockKv(new Map([['config:alerts', '{not-json']]));
-    const env: any = { GARAGE_STATE: mockKV };
-    expect(await getAlertConfig(env)).toBeNull();
+  it('saves and loads alert config from D1', async () => {
+    const { mockDb } = createMockD1();
+    const env: any = { GARAGE_DB: mockDb };
+    await saveAlertConfig(env, {
+      webhookUrl: 'https://ntfy.sh/topic',
+      thresholdMinutes: 45,
+      method: 'GET',
+    });
+    const loaded = await getAlertConfig(env);
+    expect(loaded).toMatchObject({
+      webhookUrl: 'https://ntfy.sh/topic',
+      thresholdMinutes: 45,
+      method: 'GET',
+    });
   });
 
   it('throws when saving invalid alert config', async () => {
-    const { mockKV } = createMockKv();
-    const env: any = { GARAGE_STATE: mockKV };
+    const { mockDb } = createMockD1();
+    const env: any = { GARAGE_DB: mockDb };
     await expect(saveAlertConfig(env, { webhookUrl: 'http://bad' })).rejects.toThrow(
       /Invalid alert configuration/,
     );

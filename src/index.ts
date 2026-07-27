@@ -1,10 +1,5 @@
 import { Env } from './types';
-import {
-  abortMessageProcessing,
-  beginMessageProcessing,
-  completeMessageProcessing,
-  saveDoorState,
-} from './storage';
+import { saveDoorState, pruneOldEvents } from './storage';
 import { loadConfig } from './config';
 import {
   hasFailedEmailAuthentication,
@@ -84,7 +79,7 @@ async function handleSimulate(request: Request, env: Env): Promise<Response> {
   }
 
   const value = mapActionToStatus(action);
-  await saveDoorState(env, doorKey, value);
+  await saveDoorState(env, doorKey, value, { source: 'simulate', doorName: deviceName });
 
   return jsonResponse({ success: true, door: deviceName, state: value });
 }
@@ -166,36 +161,30 @@ export default {
       }
 
       const messageId = message.headers.get('message-id');
-      if (await beginMessageProcessing(env, messageId)) {
-        console.log('Duplicate or in-flight Message-ID, skipping');
+      const subject = message.headers.get('subject') || '';
+      console.log('Subject:', subject);
+
+      const parsed = parseMyQSubject(subject);
+      if (!parsed) {
+        console.log('Subject did not match MyQ pattern');
         return;
       }
 
-      try {
-        const subject = message.headers.get('subject') || '';
-        console.log('Subject:', subject);
+      const { deviceName, action } = parsed;
+      const doorKey = resolveDoorKey(deviceName, env);
+      if (!doorKey) {
+        console.log('Unknown device name:', deviceName);
+        return;
+      }
 
-        const parsed = parseMyQSubject(subject);
-        if (!parsed) {
-          console.log('Subject did not match MyQ pattern');
-          await abortMessageProcessing(env, messageId);
-          return;
-        }
-
-        const { deviceName, action } = parsed;
-        const doorKey = resolveDoorKey(deviceName, env);
-        if (!doorKey) {
-          console.log('Unknown device name:', deviceName);
-          await abortMessageProcessing(env, messageId);
-          return;
-        }
-
-        const value = mapActionToStatus(action);
-        await saveDoorState(env, doorKey, value);
-        await completeMessageProcessing(env, messageId);
-      } catch (err) {
-        await abortMessageProcessing(env, messageId);
-        throw err;
+      const value = mapActionToStatus(action);
+      const result = await saveDoorState(env, doorKey, value, {
+        messageId,
+        source: 'email',
+        doorName: deviceName,
+      });
+      if (result.duplicate) {
+        console.log('Duplicate Message-ID, skipping');
       }
     } catch (err) {
       console.error('Error handling MyQ email:', err);
@@ -203,6 +192,15 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    try {
+      const pruned = await pruneOldEvents(env);
+      if (pruned > 0) {
+        console.log(`Pruned ${pruned} door_events older than retention window`);
+      }
+    } catch (err) {
+      console.error('Error pruning old events:', err);
+    }
+
     const config = await getAlertConfig(env);
     if (!config) {
       console.log('No alert webhook configured, skipping scheduled alert check.');

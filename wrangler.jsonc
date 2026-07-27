@@ -13,10 +13,12 @@
   "triggers": {
     "crons": ["*/15 * * * *"], // Runs every 15 minutes
   },
-  "kv_namespaces": [
+  "d1_databases": [
     {
-      "binding": "GARAGE_STATE",
-      "id": "<YOUR_KV_NAMESPACE_ID>", // Run `npm run setup` to create and fill this in
+      "binding": "GARAGE_DB",
+      "database_name": "myq-garage",
+      "database_id": "f25d59dc-73a8-4b6b-bcf0-58f052aa4d1e",
+      "migrations_dir": "migrations",
     },
   ],
   "assets": {

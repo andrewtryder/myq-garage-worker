@@ -6,7 +6,7 @@ import {
   autoGenerateKey,
   detectExistingConfig,
   loadDotEnv,
-  updateWranglerKvId,
+  updateWranglerD1DatabaseId,
 } from './setup-config.js';
 import { deployWorker as runWranglerDeploy } from './wrangler-deploy.js';
 
@@ -49,18 +49,18 @@ async function runCommandWithOutput(command, args, errorMessage) {
 }
 
 function hasExistingInfrastructure(existingConfig) {
-  return Boolean(existingConfig.kvId || existingConfig.isDeployed);
+  return Boolean(existingConfig.d1DatabaseId || existingConfig.isDeployed);
 }
 
 function printExistingConfigSummary(existingConfig) {
   console.log('\nExisting configuration detected:');
   console.log(`  Worker: ${existingConfig.workerName ?? 'unknown'}`);
 
-  if (existingConfig.kvId) {
-    const kvStatus = existingConfig.kvValid ? 'valid' : 'not found in account';
-    console.log(`  KV namespace: ${existingConfig.kvId} (${kvStatus})`);
+  if (existingConfig.d1DatabaseId) {
+    const d1Status = existingConfig.d1Valid ? 'valid' : 'not found in account';
+    console.log(`  D1 database: ${existingConfig.d1DatabaseId} (${d1Status})`);
   } else {
-    console.log('  KV namespace: not configured in wrangler.jsonc');
+    console.log('  D1 database: not configured in wrangler.jsonc');
   }
 
   console.log(`  API_KEY (Home Assistant): ${existingConfig.hasApiKey ? 'configured' : 'not set'}`);
@@ -232,56 +232,66 @@ async function configureAllowedEmailTo(existingConfig, mode) {
   return question('Enter the exact inbound email address (RCPT TO): ');
 }
 
-async function configureKvNamespace(existingConfig, mode, wranglerPath) {
-  console.log('\n--- KV Namespace Setup ---');
+async function configureD1Database(existingConfig, mode, wranglerPath) {
+  console.log('\n--- D1 Database Setup ---');
 
-  const hasExistingKv = Boolean(existingConfig.kvId && existingConfig.kvValid);
+  const hasExistingD1 = Boolean(existingConfig.d1DatabaseId && existingConfig.d1Valid);
 
-  if (hasExistingKv && mode !== 'fresh') {
-    console.log(`Using existing KV namespace: ${existingConfig.kvId}`);
-    const createKv = await question('Create a new KV namespace? (y/N): ');
-    if (createKv.toLowerCase() !== 'y') {
-      console.log('Keeping existing KV namespace.');
+  if (hasExistingD1 && mode !== 'fresh') {
+    console.log(`Using existing D1 database: ${existingConfig.d1DatabaseId}`);
+    const createD1 = await question('Create a new D1 database? (y/N): ');
+    if (createD1.toLowerCase() !== 'y') {
+      console.log('Keeping existing D1 database.');
+      console.log('Applying remote migrations…');
+      await runCommand('npm', ['run', 'db:migrations:remote'], 'Failed to apply D1 migrations.');
       return;
     }
   } else {
-    console.log('We need a Cloudflare KV namespace to store your garage state.');
-    const defaultPrompt = hasExistingKv ? '(y/N)' : '(Y/n)';
-    const createKv = await question(
-      `Create a new KV namespace named "GARAGE_STATE"? ${defaultPrompt}: `,
+    console.log('We need a Cloudflare D1 database to store garage state and history.');
+    const defaultPrompt = hasExistingD1 ? '(y/N)' : '(Y/n)';
+    const createD1 = await question(
+      `Create a new D1 database named "myq-garage"? ${defaultPrompt}: `,
     );
-    const shouldCreate = hasExistingKv
-      ? createKv.toLowerCase() === 'y'
-      : createKv.toLowerCase() !== 'n';
+    const shouldCreate = hasExistingD1
+      ? createD1.toLowerCase() === 'y'
+      : createD1.toLowerCase() !== 'n';
 
     if (!shouldCreate) {
-      console.log('Skipping KV creation. Make sure wrangler.jsonc has a valid KV ID.');
+      console.log(
+        'Skipping D1 creation. Make sure wrangler.jsonc has a valid database_id for GARAGE_DB.',
+      );
       return;
     }
   }
 
   const output = await runCommandWithOutput(
     'npx',
-    ['wrangler', 'kv', 'namespace', 'create', 'GARAGE_STATE'],
-    'Failed to create KV namespace.',
+    ['wrangler', 'd1', 'create', 'myq-garage'],
+    'Failed to create D1 database.',
   );
 
-  const match = output.match(/id = "([a-f0-9]+)"/);
+  const match =
+    output.match(/database_id\s*=\s*"([a-f0-9-]+)"/i) ||
+    output.match(/"database_id"\s*:\s*"([a-f0-9-]+)"/i) ||
+    output.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
   if (match?.[1]) {
-    const kvId = match[1];
-    console.log(`\n✅ Successfully created KV namespace with ID: ${kvId}`);
+    const databaseId = match[1];
+    console.log(`\n✅ Successfully created D1 database with ID: ${databaseId}`);
 
-    console.log('\nUpdating wrangler.jsonc with new KV ID...');
-    if (updateWranglerKvId(wranglerPath, kvId)) {
+    console.log('\nUpdating wrangler.jsonc with new D1 database ID...');
+    if (updateWranglerD1DatabaseId(wranglerPath, databaseId)) {
       console.log('✅ wrangler.jsonc updated!');
     } else {
       console.log('⚠️ Could not find wrangler.jsonc to update automatically.');
     }
+
+    console.log('\nApplying remote migrations…');
+    await runCommand('npm', ['run', 'db:migrations:remote'], 'Failed to apply D1 migrations.');
     return;
   }
 
   console.log(
-    '\n⚠️ Could not automatically extract KV ID. Please check the output above and manually update wrangler.jsonc.',
+    '\n⚠️ Could not automatically extract D1 database ID. Check the output above and update wrangler.jsonc manually.',
   );
 }
 
@@ -369,7 +379,7 @@ async function setup() {
 
   console.log('Checking your existing Cloudflare configuration...');
   console.log(
-    '(Verifying authentication, KV namespace, secrets, and deployed settings. This may take a moment.)\n',
+    '(Verifying authentication, D1 database, secrets, and deployed settings. This may take a moment.)\n',
   );
 
   const existingConfig = await detectExistingConfig(wranglerPath);
@@ -383,7 +393,7 @@ async function setup() {
 
   const apiKey = await configureApiKey(existingConfig, mode);
   const allowedEmailTo = await configureAllowedEmailTo(existingConfig, mode);
-  await configureKvNamespace(existingConfig, mode, wranglerPath);
+  await configureD1Database(existingConfig, mode, wranglerPath);
   await deployWorker(doorsJson, apiKey, allowedEmailTo, existingConfig.workerName, {
     hasApiKey: existingConfig.hasApiKey,
     hasAllowedEmailTo: existingConfig.hasAllowedEmailTo,

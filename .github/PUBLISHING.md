@@ -5,7 +5,7 @@ Use this checklist when preparing or publishing the repository on GitHub.
 ## Repository settings
 
 - [ ] Set **Description**: e.g. "Cloudflare Worker that parses myQ garage door emails and serves a live status dashboard"
-- [ ] Add **Topics**: `cloudflare-workers`, `myq`, `garage-door`, `home-assistant`, `homeassistant`, `typescript`, `cloudflare-kv`
+- [ ] Add **Topics**: `cloudflare-workers`, `myq`, `garage-door`, `home-assistant`, `homeassistant`, `typescript`, `cloudflare-d1`
 - [ ] Enable **Issues**
 - [ ] Optionally enable **Discussions** for community Q&A
 - [ ] Confirm the repository visibility is **Public**
@@ -14,14 +14,14 @@ Use this checklist when preparing or publishing the repository on GitHub.
 
 In **Settings → Secrets and variables → Actions**:
 
-| Name                    | Type     | Purpose                                   |
-| ----------------------- | -------- | ----------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI                      |
-| `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys         |
-| `API_KEY`               | Secret   | Home Assistant `GET /devices` Bearer key  |
-| `ALLOWED_EMAIL_TO`      | Secret   | Exact inbound Email Routing recipient     |
-| `GARAGE_DOORS`          | Secret   | JSON door name → KV key mapping           |
-| `KV_NAMESPACE_ID`       | Variable | KV namespace ID (injected at deploy time) |
+| Name                    | Type     | Purpose                                  |
+| ----------------------- | -------- | ---------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | Secret   | Deploy worker via CI                     |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys        |
+| `API_KEY`               | Secret   | Home Assistant `GET /devices` Bearer key |
+| `ALLOWED_EMAIL_TO`      | Secret   | Exact inbound Email Routing recipient    |
+| `GARAGE_DOORS`          | Secret   | JSON door name → D1 door id mapping      |
+| `D1_DATABASE_ID`        | Variable | D1 database id (injected at deploy time) |
 
 ## Release
 
@@ -37,5 +37,5 @@ In **Settings → Secrets and variables → Actions**:
 ## Final verification
 
 - [ ] `npm run lint && npm run typecheck && npm test -- --run` pass on `main`
-- [ ] `npm run setup` works with a fresh clone (KV placeholder in `wrangler.jsonc`)
-- [ ] No personal Cloudflare account IDs, KV namespace IDs, or API keys in tracked files
+- [ ] `npm run setup` works with a fresh clone (D1 placeholder or inject via `D1_DATABASE_ID`)
+- [ ] No personal Cloudflare account IDs, API keys, or unused legacy KV IDs in tracked files

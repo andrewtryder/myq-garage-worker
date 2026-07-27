@@ -3,7 +3,7 @@ import { performance } from 'perf_hooks';
 import { resolveDoorKey } from '../src/email-parser';
 
 const envString = {
-  GARAGE_STATE: {} as any,
+  GARAGE_DB: {} as any,
   GARAGE_DOORS: JSON.stringify({
     'Garage Door Left': 'garage-left',
     'Garage Door Right': 'garage-right',
@@ -12,7 +12,7 @@ const envString = {
 };
 
 const envObject = {
-  GARAGE_STATE: {} as any,
+  GARAGE_DB: {} as any,
   GARAGE_DOORS: {
     'Garage Door Left': 'garage-left',
     'Garage Door Right': 'garage-right',

@@ -17,7 +17,7 @@ describe('doors helpers', () => {
   });
 
   describe('buildHaDevices', () => {
-    it('uses KV keys as id and omits non-open/closed doors', () => {
+    it('uses door keys as id and omits non-open/closed doors', () => {
       const devices = buildHaDevices([
         {
           name: 'Garage Door Left',
