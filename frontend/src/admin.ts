@@ -177,14 +177,19 @@ function wireAdminActions(): void {
     simBtn.disabled = true;
     simBtn.textContent = 'Simulating…';
     try {
-      const data = await apiFetch<{ success: boolean; door: string; state: string }>(
-        '/api/simulate',
-        {
-          method: 'POST',
-          body: JSON.stringify({ deviceName: door, action }),
-        },
-      );
-      showResult(simResult, `Updated ${data.door} → ${data.state}`, false);
+      const data = await apiFetch<{
+        success: boolean;
+        door: string;
+        state: string;
+        applied: boolean;
+      }>('/api/simulate', {
+        method: 'POST',
+        body: JSON.stringify({ deviceName: door, action }),
+      });
+      const note = data.applied
+        ? `Updated ${data.door} → ${data.state}`
+        : `Not applied for ${data.door}; current state remains ${data.state}`;
+      showResult(simResult, note, !data.applied);
     } catch (err) {
       showResult(simResult, err instanceof ApiError ? err.message : 'Simulation failed', true);
     } finally {

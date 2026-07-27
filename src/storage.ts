@@ -44,6 +44,8 @@ export interface SaveDoorResult {
   state: DoorState;
   /** True when Message-ID was already recorded (duplicate delivery). */
   duplicate: boolean;
+  /** True when the chronology-gated door UPDATE applied. */
+  applied: boolean;
 }
 
 /** Read door state for write paths; rethrows D1 errors instead of coercing to UNKNOWN. */
@@ -93,6 +95,7 @@ export async function saveDoorState(
   }
 
   const statements: D1PreparedStatement[] = [];
+  let updateIndex = -1;
 
   if (messageIdHash) {
     statements.push(
@@ -101,6 +104,7 @@ export async function saveDoorState(
          VALUES (?, ?, ?, ?, ?)`,
       ).bind(doorKey, value, now, messageIdHash, source),
     );
+    updateIndex = statements.length;
     statements.push(
       env.GARAGE_DB.prepare(
         `UPDATE doors
@@ -123,6 +127,7 @@ export async function saveDoorState(
         ).bind(doorKey, value, now, source),
       );
     }
+    updateIndex = statements.length;
     statements.push(
       env.GARAGE_DB.prepare(
         `UPDATE doors
@@ -135,7 +140,16 @@ export async function saveDoorState(
 
   if (value !== 'OPEN') {
     statements.push(
-      env.GARAGE_DB.prepare(`DELETE FROM alert_state WHERE door_id = ?`).bind(doorKey),
+      env.GARAGE_DB.prepare(
+        `DELETE FROM alert_state
+         WHERE door_id = ?
+           AND EXISTS (
+             SELECT 1 FROM doors
+             WHERE id = ?
+               AND current_status = ?
+               AND updated_at = ?
+           )`,
+      ).bind(doorKey, doorKey, value, now),
     );
   }
 
@@ -145,12 +159,18 @@ export async function saveDoorState(
     const inserted = results[0]?.meta?.changes ?? 0;
     if (inserted === 0) {
       const current = await readDoorStateOrThrow(env, doorKey);
-      return { state: current, duplicate: true };
+      return { state: current, duplicate: true, applied: false };
     }
   }
 
+  const applied = (results[updateIndex]?.meta?.changes ?? 0) > 0;
+  if (!applied) {
+    const current = await readDoorStateOrThrow(env, doorKey);
+    return { state: current, duplicate: false, applied: false };
+  }
+
   console.log(`Saved state to D1 for ${doorKey}: ${value}`);
-  return { state: newState, duplicate: false };
+  return { state: newState, duplicate: false, applied: true };
 }
 
 export async function getDoorState(env: Env, doorKey: string): Promise<DoorState> {

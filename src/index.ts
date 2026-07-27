@@ -82,13 +82,23 @@ async function handleSimulate(request: Request, env: Env): Promise<Response> {
   }
 
   const value = mapActionToStatus(action);
-  await saveDoorState(env, doorKey, value, { source: 'simulate', doorName: deviceName });
-  await recordOpsEvent(env, 'door_change', {
-    doorId: doorKey,
-    detail: `${deviceName} → ${value} (simulate)`,
+  const result = await saveDoorState(env, doorKey, value, {
+    source: 'simulate',
+    doorName: deviceName,
   });
+  if (result.applied) {
+    await recordOpsEvent(env, 'door_change', {
+      doorId: doorKey,
+      detail: `${deviceName} → ${value} (simulate)`,
+    });
+  }
 
-  return jsonResponse({ success: true, door: deviceName, state: value });
+  return jsonResponse({
+    success: true,
+    door: deviceName,
+    state: result.state.value,
+    applied: result.applied,
+  });
 }
 
 async function handleAlertConfigGet(env: Env): Promise<Response> {
@@ -216,10 +226,12 @@ export default {
         doorId: doorKey,
         detail: `${deviceName} → ${value}`,
       });
-      await recordOpsEvent(env, 'door_change', {
-        doorId: doorKey,
-        detail: `${deviceName} → ${value}`,
-      });
+      if (result.applied) {
+        await recordOpsEvent(env, 'door_change', {
+          doorId: doorKey,
+          detail: `${deviceName} → ${value}`,
+        });
+      }
     } catch (err) {
       console.error('Error handling MyQ email:', err);
       await recordOpsEvent(env, 'email_reject', { detail: 'handler_error' });

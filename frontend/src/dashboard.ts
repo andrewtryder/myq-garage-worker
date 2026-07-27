@@ -65,9 +65,11 @@ function emailAgeLabel(iso: string | null | undefined): string {
 function healthLine(data: DashboardResponse): { text: string; className: string } {
   const emailAge = emailAgeLabel(data.lastEmailReceivedAt ?? data.lastEventAt);
   const checked = formatRelativeTime(data.generatedAt).replace(/^\(|\)$/g, '') || 'just now';
-  if (data.stale || data.emailPipelineStale) {
+  const staleDoors = data.doors.filter((door) => door.stale);
+  if (staleDoors.length > 0 || data.stale || data.emailPipelineStale) {
+    const n = staleDoors.length || 1;
     return {
-      text: `Status may be stale · ${emailAge}`,
+      text: `${n} door status may be stale · ${emailAge}`,
       className: 'health-line health-stale',
     };
   }
@@ -87,15 +89,32 @@ function healthLine(data: DashboardResponse): { text: string; className: string 
   };
 }
 
+function doorEmailAgeLabel(iso: string | null | undefined): string {
+  if (!iso) return 'no email yet';
+  const relative = formatRelativeTime(iso).replace(/^\(|\)$/g, '');
+  return relative || iso;
+}
+
 function renderStaleBanner(data: DashboardResponse): string {
-  if (!data.stale && !data.emailPipelineStale) return '';
-  const hours = data.staleAfterHours;
-  const days = hours >= 24 ? `${Math.round((hours / 24) * 10) / 10} days` : `${hours} hours`;
-  const last = data.lastEmailReceivedAt ?? data.lastEventAt;
-  const lastText = last
-    ? `Last garage email ${formatRelativeTime(last)}.`
-    : 'No garage email has been recorded yet.';
-  return `Status may be stale. No garage email within ${days}. ${lastText}`;
+  const staleDoors = data.doors.filter((door) => door.stale);
+  if (staleDoors.length === 0) return '';
+
+  const names = staleDoors.map((door) => door.name);
+  const nameList =
+    names.length === 1
+      ? names[0]
+      : names.length === 2
+        ? `${names[0]} and ${names[1]}`
+        : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+
+  const perDoor = staleDoors
+    .map(
+      (door) =>
+        `Last email for ${door.name}: ${doorEmailAgeLabel(door.lastEmailAt)}.`,
+    )
+    .join(' ');
+
+  return `Status confidence is stale for ${nameList}. ${perDoor}`;
 }
 
 function renderDoors(doors: DashboardDoor[]): string {

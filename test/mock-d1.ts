@@ -133,7 +133,20 @@ export function createMockD1(state = createState()) {
           }
         }
       } else if (normalized.startsWith('DELETE FROM alert_state')) {
-        changes = state.alert_state.delete(String(bound[0])) ? 1 : 0;
+        const doorId = String(bound[0]);
+        if (normalized.includes('EXISTS')) {
+          const id = String(bound[1]);
+          const status = String(bound[2]);
+          const updatedAt = String(bound[3]);
+          const door = state.doors.get(id);
+          const matches =
+            door &&
+            door.current_status === status &&
+            String(door.updated_at ?? '') === updatedAt;
+          changes = matches && state.alert_state.delete(doorId) ? 1 : 0;
+        } else {
+          changes = state.alert_state.delete(doorId) ? 1 : 0;
+        }
       } else if (normalized.startsWith('INSERT INTO alert_state')) {
         const [doorId, openSince, lastAlert] = bound as [string, string, string];
         state.alert_state.set(doorId, {

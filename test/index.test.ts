@@ -314,6 +314,57 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(400);
     });
 
+    it('POST /api/simulate applies and returns persisted state', async () => {
+      const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceName: 'Garage Door Left', action: 'opened' }),
+        }),
+        mockEnv,
+        {} as any,
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        door: string;
+        state: string;
+        applied: boolean;
+      };
+      expect(response.status).toBe(200);
+      expect(json).toMatchObject({
+        success: true,
+        door: 'Garage Door Left',
+        state: 'OPEN',
+        applied: true,
+      });
+    });
+
+    it('POST /api/simulate reports applied:false when chronology rejects', async () => {
+      const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
+      await saveDoorState(mockEnv, 'garage-left', 'OPEN', { source: 'simulate' });
+      d1State.doors.get('garage-left').updated_at = '2099-01-01T00:00:00.000Z';
+
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceName: 'Garage Door Left', action: 'closed' }),
+        }),
+        mockEnv,
+        {} as any,
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        state: string;
+        applied: boolean;
+      };
+      expect(response.status).toBe(200);
+      expect(json.applied).toBe(false);
+      expect(json.state).toBe('OPEN');
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+    });
+
     it('POST /api/alert-config saves config and redacts URL in response', async () => {
       const mockEnv: any = baseEnv({ GARAGE_DOORS: { 'Garage Door Left': 'garage-left' } });
       const response = await worker.fetch(
