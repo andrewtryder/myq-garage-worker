@@ -224,7 +224,9 @@ export default {
 
       await recordOpsEvent(env, 'email_ok', {
         doorId: doorKey,
-        detail: `${deviceName} → ${value}`,
+        detail: result.applied
+          ? `${deviceName} → ${value}`
+          : `${deviceName} → ${value} received; not applied because a newer state exists`,
       });
       if (result.applied) {
         await recordOpsEvent(env, 'door_change', {

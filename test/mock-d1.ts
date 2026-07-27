@@ -140,9 +140,7 @@ export function createMockD1(state = createState()) {
           const updatedAt = String(bound[3]);
           const door = state.doors.get(id);
           const matches =
-            door &&
-            door.current_status === status &&
-            String(door.updated_at ?? '') === updatedAt;
+            door && door.current_status === status && String(door.updated_at ?? '') === updatedAt;
           changes = matches && state.alert_state.delete(doorId) ? 1 : 0;
         } else {
           changes = state.alert_state.delete(doorId) ? 1 : 0;
