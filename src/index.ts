@@ -9,6 +9,7 @@ import {
   parseMyQSubject,
   resolveDoorKey,
 } from './email-parser';
+import { resolveOrderingTime } from './email-time';
 import { runOpenDoorAlerts, testAlert } from './alerts';
 import {
   getAlertConfig,
@@ -208,10 +209,18 @@ export default {
       }
 
       const value = mapActionToStatus(action);
+      const receivedAt = new Date().toISOString();
+      const { eventTimeSkewHours } = loadConfig(env);
+      const occurredAt = resolveOrderingTime(
+        message.headers.get('date'),
+        receivedAt,
+        eventTimeSkewHours,
+      );
       const result = await saveDoorState(env, doorKey, value, {
         messageId,
         source: 'email',
         doorName: deviceName,
+        occurredAt,
       });
       if (result.duplicate) {
         console.log('Duplicate Message-ID, skipping');

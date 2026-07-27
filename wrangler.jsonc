@@ -9,6 +9,7 @@
   "vars": {
     "VERSION": "1.1.0", // x-release-please-version
     "STALE_AFTER_HOURS": "48",
+    "EVENT_TIME_SKEW_HOURS": "6",
   },
   // Configure how often to check for left-open doors
   "triggers": {

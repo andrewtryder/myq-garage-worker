@@ -69,7 +69,8 @@ export function createMockD1(state = createState()) {
         }
         changes = 1;
       } else if (normalized.startsWith('INSERT OR IGNORE INTO door_events')) {
-        const [doorId, status, occurredAt, messageIdHash, source] = bound as [
+        const [doorId, status, occurredAt, receivedAt, messageIdHash, source] = bound as [
+          string,
           string,
           string,
           string,
@@ -87,6 +88,7 @@ export function createMockD1(state = createState()) {
             door_id: doorId,
             status,
             occurred_at: occurredAt,
+            received_at: receivedAt,
             message_id_hash: messageIdHash,
             source,
           });
@@ -96,12 +98,14 @@ export function createMockD1(state = createState()) {
         const doorId = String(bound[0]);
         const status = String(bound[1]);
         const occurredAt = String(bound[2]);
+        const receivedAt = String(bound[3]);
         const source = String(bound[bound.length - 1]);
         state.door_events.push({
           id: state.nextEventId++,
           door_id: doorId,
           status,
           occurred_at: occurredAt,
+          received_at: receivedAt,
           message_id_hash: null,
           source,
         });

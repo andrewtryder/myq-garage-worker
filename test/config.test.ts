@@ -27,6 +27,7 @@ describe('config', () => {
     expect(config.allowedEmailTo).toBe('garage@example.com');
     expect(config.garageDoors).toEqual({ Left: 'left' });
     expect(config.staleAfterHours).toBe(72);
+    expect(config.eventTimeSkewHours).toBe(6);
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.garageDoors)).toBe(true);
   });
@@ -37,6 +38,16 @@ describe('config', () => {
       GARAGE_DOORS: {},
     } as Env);
     expect(config.staleAfterHours).toBe(48);
+    expect(config.eventTimeSkewHours).toBe(6);
+  });
+
+  it('parses EVENT_TIME_SKEW_HOURS', () => {
+    const config = loadConfig({
+      GARAGE_DB: {} as D1Database,
+      GARAGE_DOORS: {},
+      EVENT_TIME_SKEW_HOURS: '12',
+    } as Env);
+    expect(config.eventTimeSkewHours).toBe(12);
   });
 
   it('rejects ambiguous GARAGE_DOORS mappings', () => {
