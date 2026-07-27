@@ -144,15 +144,18 @@ describe('storage D1 tests', () => {
       await saveDoorState(mockEnv, 'garage-left', 'OPEN', {
         messageId: '<open@example.com>',
         source: 'email',
+        occurredAt: '2026-07-27T18:00:00.000Z',
       });
       await setAlertLatch(mockEnv, 'garage-left', {
         openCreatedAt: '2026-01-01T00:00:00.000Z',
         lastAlertSentAt: '2026-01-01T01:00:00.000Z',
       });
 
+      // Same ordering timestamp as the original event (CI can collide on Date.now ms).
       const duplicate = await saveDoorState(mockEnv, 'garage-left', 'CLOSED', {
         messageId: '<open@example.com>',
         source: 'email',
+        occurredAt: '2026-07-27T18:00:00.000Z',
       });
       expect(duplicate.duplicate).toBe(true);
       expect(duplicate.applied).toBe(false);
@@ -160,6 +163,7 @@ describe('storage D1 tests', () => {
         openCreatedAt: '2026-01-01T00:00:00.000Z',
         lastAlertSentAt: '2026-01-01T01:00:00.000Z',
       });
+      expect((await getDoorState(mockEnv, 'garage-left')).value).toBe('OPEN');
     });
 
     it('does not clear OPEN latch when chronology rejects CLOSED', async () => {

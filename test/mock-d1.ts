@@ -124,10 +124,16 @@ export function createMockD1(state = createState()) {
           if (normalized.includes('EXISTS')) {
             const messageIdHash = String(bound[5]);
             const occurredAt = String(bound[6]);
-            existsOk = state.door_events.some(
-              (event) =>
-                event.message_id_hash === messageIdHash && event.occurred_at === occurredAt,
-            );
+            const receivedAt = bound.length > 7 ? String(bound[7]) : null;
+            existsOk = state.door_events.some((event) => {
+              if (event.message_id_hash !== messageIdHash || event.occurred_at !== occurredAt) {
+                return false;
+              }
+              if (receivedAt != null) {
+                return String(event.received_at ?? '') === receivedAt;
+              }
+              return true;
+            });
           }
           if (chronologyOk && existsOk) {
             door.current_status = status;
