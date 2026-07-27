@@ -20,13 +20,13 @@ To feed data into the worker, we first need to instruct the MyQ app to send emai
    ```bash
    npm install
    ```
-3. Run the interactive setup wizard, which will guide you through mapping your garage doors, creating the KV namespace, and deploying the worker:
+3. Run the interactive setup wizard, which will guide you through mapping your garage doors and deploying the worker:
 
    ```bash
    npm run setup
    ```
 
-   **Re-running the wizard:** If you already have a Worker deployed, the wizard detects your existing KV namespace, secrets, and `GARAGE_DOORS` configuration. It defaults to reusing that infrastructure and will not recreate KV unless you explicitly ask it to. A deploy dry-run runs before any live deployment.
+   **Re-running the wizard:** If you already have a Worker deployed, the wizard detects your existing secrets and `GARAGE_DOORS` configuration. A deploy dry-run runs before any live deployment. Ensure D1 migrations are applied (`npm run db:migrations:remote`).
 
    **Authentication:** You can authenticate with a `CLOUDFLARE_API_TOKEN` in a `.env` file (recommended) or with `npx wrangler login`. If `CLOUDFLARE_API_TOKEN` is set, the wizard uses it directly and will not attempt OAuth login.
 
@@ -135,4 +135,4 @@ curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/"
 
 The dashboard itself does not ask for an API key. Admin tools live at `/admin` and call `/api/simulate`, `/api/alert-config`, and `/api/test-alert` — protect those with Access (or keep them unreachable from the public internet).
 
-Configure left-open webhook alerts on **Admin** (settings are saved to KV, not environment variables). Webhook URLs must be HTTPS and are validated against private/metadata destinations.
+Configure left-open webhook alerts on **Admin** (settings are saved to D1, not environment variables). Webhook URLs must be HTTPS and are validated against private/metadata destinations.

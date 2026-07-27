@@ -4,7 +4,7 @@ import prettier from 'eslint-config-prettier';
 
 export default ts.config(
   {
-    ignores: ['.wrangler/**', 'dist/**', '.git/**', 'frontend/dist/**'],
+    ignores: ['.wrangler/**', 'dist/**', '.git/**', 'frontend/dist/**', 'coverage/**'],
   },
   js.configs.recommended,
   ...ts.configs.recommended,

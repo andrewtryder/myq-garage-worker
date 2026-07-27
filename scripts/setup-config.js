@@ -51,17 +51,17 @@ export function runCommandSilent(command, args = []) {
 
 export function parseWranglerConfig(wranglerPath) {
   if (!fs.existsSync(wranglerPath)) {
-    return { workerName: null, kvId: null };
+    return { workerName: null, d1DatabaseId: null };
   }
 
   const content = fs.readFileSync(wranglerPath, 'utf8');
   const workerMatch = content.match(/"name"\s*:\s*"([^"]+)"/);
-  const kvMatch = content.match(/"binding"\s*:\s*"GARAGE_STATE"[\s\S]*?"id"\s*:\s*"([^"]+)"/);
-  const kvId = kvMatch?.[1] && kvMatch[1] !== '<YOUR_KV_NAMESPACE_ID>' ? kvMatch[1] : null;
+  const d1Match = content.match(/"binding"\s*:\s*"GARAGE_DB"[\s\S]*?"database_id"\s*:\s*"([^"]+)"/);
+  const d1DatabaseId = d1Match?.[1] && d1Match[1] !== '<YOUR_D1_DATABASE_ID>' ? d1Match[1] : null;
 
   return {
     workerName: workerMatch?.[1] ?? null,
-    kvId,
+    d1DatabaseId,
   };
 }
 
@@ -123,7 +123,6 @@ export function fetchRemoteConfig(_workerName) {
     garageDoors: null,
     hasApiKey: false,
     hasAllowedEmailTo: false,
-    kvValid: false,
   };
 
   const deploymentsRaw = runCommandSilent('npx', ['wrangler', 'deployments', 'list', '--json']);
@@ -170,19 +169,19 @@ export function fetchRemoteConfig(_workerName) {
   return config;
 }
 
-export function isKvIdValid(kvId) {
-  if (!kvId) {
+export function isD1DatabaseIdValid(databaseId) {
+  if (!databaseId) {
     return false;
   }
 
-  const namespacesRaw = runCommandSilent('npx', ['wrangler', 'kv', 'namespace', 'list']);
-  if (!namespacesRaw) {
+  const databasesRaw = runCommandSilent('npx', ['wrangler', 'd1', 'list', '--json']);
+  if (!databasesRaw) {
     return false;
   }
 
   try {
-    const namespaces = JSON.parse(namespacesRaw);
-    return Array.isArray(namespaces) && namespaces.some((namespace) => namespace.id === kvId);
+    const databases = JSON.parse(databasesRaw);
+    return Array.isArray(databases) && databases.some((database) => database.uuid === databaseId);
   } catch {
     return false;
   }
@@ -194,8 +193,8 @@ export async function detectExistingConfig(wranglerPath) {
 
   const existingConfig = {
     workerName: local.workerName,
-    kvId: local.kvId,
-    kvValid: false,
+    d1DatabaseId: local.d1DatabaseId,
+    d1Valid: false,
     garageDoors: null,
     hasApiKey: false,
     hasAllowedEmailTo: false,
@@ -212,20 +211,20 @@ export async function detectExistingConfig(wranglerPath) {
   existingConfig.garageDoors = remote.garageDoors;
   existingConfig.hasApiKey = remote.hasApiKey;
   existingConfig.hasAllowedEmailTo = remote.hasAllowedEmailTo;
-  existingConfig.kvValid = isKvIdValid(local.kvId);
+  existingConfig.d1Valid = isD1DatabaseIdValid(local.d1DatabaseId);
 
   return existingConfig;
 }
 
-export function updateWranglerKvId(wranglerPath, kvId) {
+export function updateWranglerD1DatabaseId(wranglerPath, databaseId) {
   if (!fs.existsSync(wranglerPath)) {
     return false;
   }
 
   let wranglerContent = fs.readFileSync(wranglerPath, 'utf8');
   wranglerContent = wranglerContent.replace(
-    /"id"\s*:\s*"(?:<YOUR_KV_NAMESPACE_ID>|[a-f0-9]+)"/,
-    `"id": "${kvId}"`,
+    /"database_id"\s*:\s*"(?:<YOUR_D1_DATABASE_ID>|[a-f0-9-]+)"/,
+    `"database_id": "${databaseId}"`,
   );
   fs.writeFileSync(wranglerPath, wranglerContent);
   return true;

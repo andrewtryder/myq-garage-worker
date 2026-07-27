@@ -15,7 +15,7 @@ describe('config', () => {
 
   it('returns immutable config with optional apiKey and allowedEmailTo', () => {
     const env = {
-      GARAGE_STATE: {} as KVNamespace,
+      GARAGE_DB: {} as D1Database,
       GARAGE_DOORS: { Left: 'left' },
       API_KEY: 'secret',
       ALLOWED_EMAIL_TO: ' Garage@Example.com ',

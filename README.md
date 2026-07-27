@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/andrewtryder/myq-garage-worker)](https://github.com/andrewtryder/myq-garage-worker/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Cloudflare Worker that integrates **myQ** notification emails and displays a clean, beautiful status dashboard. State is stored natively in Cloudflare KV.
+A Cloudflare Worker that integrates **myQ** notification emails and displays a clean status dashboard. State and history are stored in Cloudflare D1.
 
 ![Garage status dashboard](docs/dashboard.png)
 
@@ -16,7 +16,7 @@ For a step-by-step guide on how to configure MyQ, Cloudflare, and email forwardi
 
 This Worker is one deployment with:
 
-1. **Email Routing Handler (`email`)**: Parses myQ notification emails and writes door state to Cloudflare KV.
+1. **Email Routing Handler (`email`)**: Parses myQ notification emails and writes door state/events to Cloudflare D1.
 2. **Scheduled Handler (`scheduled`)**: Cron checks for left-open doors and fires webhooks.
 3. **HTTP API (`fetch`)**: JSON under `/api/*` plus Home Assistant `GET /devices`.
 4. **Static frontend (Workers Static Assets)**: Vite-built `/` (status) and `/admin` (alerts/simulate), same hostname as the API.
@@ -26,7 +26,7 @@ This Worker is one deployment with:
 - **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/) + [Static Assets](https://developers.cloudflare.com/workers/static-assets/)
 - **Frontend**: Vite + vanilla TypeScript
 - **Codebase**: TypeScript, ESLint, Prettier
-- **Storage**: [Cloudflare KV](https://developers.cloudflare.com/kv/)
+- **Storage**: [Cloudflare D1](https://developers.cloudflare.com/d1/)
 
 ## Security (operator responsibility)
 
@@ -42,7 +42,7 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 
 | Variable Name      | Description                                                                                                                                                                              |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to specific KV keys.                                                                                |
+| `GARAGE_DOORS`     | A JSON object mapping the exact names of your garage doors (from the myQ app/emails) to stable door ids (D1 `doors.id`).                                                                 |
 | `API_KEY`          | Secret required for `GET /devices` (and deprecated `GET /?json=true`). Send `Authorization: Bearer` or `x-api-key`. Not used for the browser dashboard or `/api/dashboard` (use Access). |
 | `ALLOWED_EMAIL_TO` | _(Recommended)_ Exact envelope recipient (RCPT TO) that must match for inbound myQ mail. Rejects other aliases if set.                                                                   |
 
@@ -55,11 +55,11 @@ The environment variable `GARAGE_DOORS` must be provided at deployment time or i
 }
 ```
 
-You also need to bind a KV Namespace to `GARAGE_STATE`. Run `npm run setup` to create one automatically, or see `wrangler.jsonc` for manual configuration.
+You also need a D1 database bound as `GARAGE_DB` (see `wrangler.jsonc`). Run `npm run db:migrations:remote` after creating the database. If you previously stored state in KV, run `npm run db:migrate-from-kv` once (requires `KV_NAMESPACE_ID` in the environment) before relying on D1 alone.
 
 ## Setup and Deployment
 
-We provide an interactive wizard to configure your garage doors, create the Cloudflare KV namespace, and deploy the worker:
+We provide an interactive wizard to configure your garage doors and deploy the worker:
 
 1. Install dependencies:
    ```bash
@@ -99,7 +99,7 @@ Open your Access-protected worker URL, go to **Admin**, choose a configured door
 
 ### Option 2: Alerts on Admin
 
-On **Admin**, configure a left-open webhook (stored in KV, used by the cron job every 15 minutes):
+On **Admin**, configure a left-open webhook (stored in D1, used by the cron job every 15 minutes):
 
 - **Webhook URL** — HTTPS only (ntfy, Pushover, Apprise, etc.; use a secret topic URL). Private/localhost destinations are rejected.
 - **Threshold (minutes)** — how long a door must be open before alerting
@@ -139,11 +139,11 @@ To set this up, add the following Repository Secrets in your GitHub repository (
 
 Add the following Repository **Variables** (not secrets):
 
-- `KV_NAMESPACE_ID`: Your Cloudflare KV namespace ID for `GARAGE_STATE` (replaces the placeholder in `wrangler.jsonc` during CI deploy).
+- `D1_DATABASE_ID`: Your Cloudflare D1 database id for `myq-garage` / `GARAGE_DB` (injected into `wrangler.jsonc` during CI deploy when set).
 
 Add the following Repository **Secrets**:
 
-- `GARAGE_DOORS`: JSON object mapping door names to KV keys (passed to the worker at deploy time).
+- `GARAGE_DOORS`: JSON object mapping door names to door ids (passed to the worker at deploy time).
 
 ## Integrations & Automations
 
@@ -156,7 +156,7 @@ The worker checks every 15 minutes (via Cloudflare Cron Triggers) for doors left
 1. Open the dashboard **Alerts** tab and configure your webhook URL, threshold, and HTTP method, then click **Save**.
 2. Ensure you have the `[triggers]` configuration in `wrangler.jsonc` to fire the cron job.
 
-Alert settings are stored in KV (not environment variables). Protect the dashboard with Cloudflare Access so only you can change webhook settings.
+Alert settings are stored in D1 (not environment variables). Protect the dashboard with Cloudflare Access so only you can change webhook settings.
 
 **POST** sends a JSON body:
 
@@ -206,7 +206,7 @@ The integration calls `GET /devices`, which returns:
 ]
 ```
 
-`id` is the stable KV key from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
+`id` is the stable door id from `GARAGE_DOORS`. `status` is lowercase `open` or `closed`. Doors in `STOPPED`, `UNKNOWN`, or with no state yet are omitted from the response.
 
 **Browser dashboard:** `GET /api/dashboard` (Access-protected, no `API_KEY`) returns door status and recent events for the static UI.
 

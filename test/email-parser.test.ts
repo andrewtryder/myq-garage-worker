@@ -13,7 +13,8 @@ import { Env } from '../src/types';
 
 describe('email-parser unit tests', () => {
   const mockEnv: Env = {
-    GARAGE_STATE: {} as any,
+    GARAGE_DB: {} as any,
+
     GARAGE_DOORS: {
       'Garage Door Left': 'garage-left',
       'Garage Door Right': 'garage-right',
@@ -22,7 +23,8 @@ describe('email-parser unit tests', () => {
   };
 
   const mockEnvString: Env = {
-    GARAGE_STATE: {} as any,
+    GARAGE_DB: {} as any,
+
     GARAGE_DOORS:
       '{"Garage Door Left": "garage-left", "Garage Door Right": "garage-right", "Main Garage": "main-garage"}',
   };

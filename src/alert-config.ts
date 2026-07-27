@@ -1,8 +1,6 @@
 import { Env } from './types';
 import { assertSafeWebhookUrl, redactWebhookUrl } from './webhook-url';
 
-export const ALERT_CONFIG_KEY = 'config:alerts';
-
 export interface AlertConfig {
   webhookUrl: string;
   thresholdMinutes: number;
@@ -74,11 +72,25 @@ export function validateAlertConfig(input: unknown): AlertConfig | null {
 
 export async function getAlertConfig(env: Env): Promise<AlertConfig | null> {
   try {
-    const raw = await env.GARAGE_STATE.get(ALERT_CONFIG_KEY);
-    if (!raw) return null;
-    return validateAlertConfig(JSON.parse(raw));
+    const row = await env.GARAGE_DB.prepare(
+      `SELECT webhook_url, threshold_minutes, reminder_minutes, method
+       FROM alert_config WHERE id = 1`,
+    ).first<{
+      webhook_url: string;
+      threshold_minutes: number;
+      reminder_minutes: number | null;
+      method: string;
+    }>();
+
+    if (!row) return null;
+    return validateAlertConfig({
+      webhookUrl: row.webhook_url,
+      thresholdMinutes: row.threshold_minutes,
+      reminderMinutes: row.reminder_minutes ?? undefined,
+      method: row.method,
+    });
   } catch (err) {
-    console.error('Failed to read alert config from KV:', err);
+    console.error('Failed to read alert config from D1:', err);
     return null;
   }
 }
@@ -89,7 +101,26 @@ export async function saveAlertConfig(env: Env, input: unknown): Promise<AlertCo
     throw new Error('Invalid alert configuration');
   }
 
-  await env.GARAGE_STATE.put(ALERT_CONFIG_KEY, JSON.stringify(config));
+  const now = new Date().toISOString();
+  await env.GARAGE_DB.prepare(
+    `INSERT INTO alert_config (id, webhook_url, threshold_minutes, reminder_minutes, method, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       webhook_url = excluded.webhook_url,
+       threshold_minutes = excluded.threshold_minutes,
+       reminder_minutes = excluded.reminder_minutes,
+       method = excluded.method,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(
+      config.webhookUrl,
+      config.thresholdMinutes,
+      config.reminderMinutes ?? null,
+      config.method,
+      now,
+    )
+    .run();
+
   return config;
 }
 

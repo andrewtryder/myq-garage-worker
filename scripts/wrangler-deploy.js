@@ -11,17 +11,17 @@ const GARAGE_DOORS_VAR_PATTERN = /\n\s*"GARAGE_DOORS"\s*:\s*(?:"(?:\\.|[^"\\])*"
  * Patch wrangler.jsonc for deploy without shell-quoting issues.
  * GARAGE_DOORS is written as a JSON string in vars so the worker receives valid JSON.
  */
-export function injectDeployVars(wranglerPath, { kvNamespaceId, garageDoors } = {}) {
+export function injectDeployVars(wranglerPath, { d1DatabaseId, garageDoors } = {}) {
   if (!fs.existsSync(wranglerPath)) {
     throw new Error(`wrangler config not found: ${wranglerPath}`);
   }
 
   let content = fs.readFileSync(wranglerPath, 'utf8');
 
-  if (kvNamespaceId) {
+  if (d1DatabaseId) {
     content = content.replace(
-      /"id"\s*:\s*"(?:<YOUR_KV_NAMESPACE_ID>|[a-f0-9]+)"/,
-      `"id": "${kvNamespaceId}"`,
+      /"database_id"\s*:\s*"(?:<YOUR_D1_DATABASE_ID>|[a-f0-9-]+)"/,
+      `"database_id": "${d1DatabaseId}"`,
     );
   }
 
@@ -29,7 +29,7 @@ export function injectDeployVars(wranglerPath, { kvNamespaceId, garageDoors } = 
     const jsonStr = typeof garageDoors === 'string' ? garageDoors : JSON.stringify(garageDoors);
     const parsed = JSON.parse(jsonStr);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('GARAGE_DOORS must be a JSON object mapping door names to KV keys');
+      throw new Error('GARAGE_DOORS must be a JSON object mapping door names to door ids');
     }
 
     const jsoncValue = JSON.stringify(jsonStr);
@@ -68,7 +68,7 @@ export function writeDeployConfig(options = {}) {
   fs.copyFileSync(sourcePath, tmpPath);
 
   injectDeployVars(tmpPath, {
-    kvNamespaceId: options.kvNamespaceId ?? process.env.KV_NAMESPACE_ID,
+    d1DatabaseId: options.d1DatabaseId ?? process.env.D1_DATABASE_ID,
     garageDoors: options.garageDoors ?? process.env.GARAGE_DOORS,
   });
 
@@ -103,7 +103,7 @@ export function deployWorker(options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const configPath = writeDeployConfig({
     cwd,
-    kvNamespaceId: options.kvNamespaceId ?? process.env.KV_NAMESPACE_ID,
+    d1DatabaseId: options.d1DatabaseId ?? process.env.D1_DATABASE_ID,
     garageDoors: options.garageDoors ?? process.env.GARAGE_DOORS,
   });
 
