@@ -2,7 +2,7 @@ import { loadConfig } from './config';
 import { DoorState, DoorStatus, Env, AlertLatch } from './types';
 
 const HISTORY_LIMIT = 10;
-const HISTORY_RETENTION_DAYS = 90;
+export const HISTORY_RETENTION_DAYS = 90;
 
 export async function hashMessageId(normalized: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));

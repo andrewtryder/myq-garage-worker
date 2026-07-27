@@ -8,7 +8,9 @@ interface DbState {
   alert_config: Row | null;
   alert_state: Map<string, Row>;
   rate_limits: Map<string, Row>;
+  ops_events: Row[];
   nextEventId: number;
+  nextOpsId: number;
 }
 
 function createState(): DbState {
@@ -18,7 +20,9 @@ function createState(): DbState {
     alert_config: null,
     alert_state: new Map(),
     rate_limits: new Map(),
+    ops_events: [],
     nextEventId: 1,
+    nextOpsId: 1,
   };
 }
 
@@ -37,6 +41,41 @@ export function createMockD1(state = createState()) {
         return stmt;
       }),
       first: vi.fn(async <T>(): Promise<T | null> => {
+        if (normalized.startsWith('SELECT 1 AS ok')) {
+          return { ok: 1 } as T;
+        }
+        if (normalized.includes('MAX(occurred_at) AS last_event_at FROM door_events')) {
+          if (state.door_events.length === 0) return { last_event_at: null } as T;
+          const last = [...state.door_events].sort((a, b) =>
+            String(b.occurred_at).localeCompare(String(a.occurred_at)),
+          )[0];
+          return { last_event_at: last.occurred_at } as T;
+        }
+        if (normalized.includes('MAX(updated_at) AS last_updated FROM doors')) {
+          if (state.doors.size === 0) return { last_updated: null } as T;
+          let max: string | null = null;
+          for (const door of state.doors.values()) {
+            const updated = String(door.updated_at ?? '');
+            if (!max || updated > max) max = updated;
+          }
+          return { last_updated: max } as T;
+        }
+        if (
+          normalized.includes('FROM ops_events') &&
+          normalized.includes('WHERE kind = ?') &&
+          normalized.includes('ORDER BY occurred_at DESC')
+        ) {
+          const kind = String(bound[0]);
+          const match = state.ops_events
+            .filter((event) => event.kind === kind)
+            .sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)))[0];
+          if (!match) return null;
+          return {
+            occurred_at: match.occurred_at,
+            door_id: match.door_id ?? null,
+            detail: match.detail ?? null,
+          } as T;
+        }
         if (normalized.startsWith('SELECT current_status, state_since FROM doors')) {
           const door = state.doors.get(String(bound[0]));
           if (!door) return null;
@@ -188,6 +227,28 @@ export function createMockD1(state = createState()) {
             (event) => String(event.occurred_at) >= cutoff,
           );
           changes = before - state.door_events.length;
+        } else if (normalized.startsWith('INSERT INTO ops_events')) {
+          const [occurredAt, kind, doorId, detail] = bound as [
+            string,
+            string,
+            string | null,
+            string | null,
+          ];
+          state.ops_events.push({
+            id: state.nextOpsId++,
+            occurred_at: occurredAt,
+            kind,
+            door_id: doorId,
+            detail,
+          });
+          changes = 1;
+        } else if (normalized.startsWith('DELETE FROM ops_events WHERE occurred_at')) {
+          const cutoff = String(bound[0]);
+          const before = state.ops_events.length;
+          state.ops_events = state.ops_events.filter(
+            (event) => String(event.occurred_at) >= cutoff,
+          );
+          changes = before - state.ops_events.length;
         }
 
         return {

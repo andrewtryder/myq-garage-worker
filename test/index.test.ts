@@ -172,8 +172,39 @@ describe('myq-garage-worker integration tests', () => {
       expect(response.status).toBe(200);
       const json = (await response.json()) as {
         doors: Array<{ id: string; status: string }>;
+        stale: boolean;
+        openCount: number;
       };
       expect(json.doors[0]).toMatchObject({ id: 'garage-left', status: 'OPEN' });
+      expect(json.openCount).toBe(1);
+      expect(typeof json.stale).toBe('boolean');
+    });
+
+    it('GET /health returns diagnostics without secrets', async () => {
+      const mockEnv: any = baseEnv({
+        VERSION: '1.1.0',
+        API_KEY: 'super-secret',
+        ALLOWED_EMAIL_TO: 'garage@example.com',
+      });
+      const response = await worker.fetch(
+        new Request('https://worker.dev/health'),
+        mockEnv,
+        {} as any,
+      );
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as {
+        version: string;
+        d1Ok: boolean;
+        hasApiKey: boolean;
+        hasAllowedEmailTo: boolean;
+      };
+      expect(json.version).toBe('1.1.0');
+      expect(json.d1Ok).toBe(true);
+      expect(json.hasApiKey).toBe(true);
+      expect(json.hasAllowedEmailTo).toBe(true);
+      const body = JSON.stringify(json);
+      expect(body).not.toContain('super-secret');
+      expect(body).not.toContain('garage@example.com');
     });
 
     it('returns 401 for GET /devices when API_KEY is missing', async () => {

@@ -19,14 +19,24 @@ describe('config', () => {
       GARAGE_DOORS: { Left: 'left' },
       API_KEY: 'secret',
       ALLOWED_EMAIL_TO: ' Garage@Example.com ',
+      STALE_AFTER_HOURS: '72',
     } as Env;
 
     const config = loadConfig(env);
     expect(config.apiKey).toBe('secret');
     expect(config.allowedEmailTo).toBe('garage@example.com');
     expect(config.garageDoors).toEqual({ Left: 'left' });
+    expect(config.staleAfterHours).toBe(72);
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.garageDoors)).toBe(true);
+  });
+
+  it('defaults staleAfterHours to 48', () => {
+    const config = loadConfig({
+      GARAGE_DB: {} as D1Database,
+      GARAGE_DOORS: {},
+    } as Env);
+    expect(config.staleAfterHours).toBe(48);
   });
 
   it('exposes isDoorStatus helper', () => {

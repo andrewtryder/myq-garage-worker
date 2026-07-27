@@ -131,7 +131,7 @@ curl -i -H "Authorization: Bearer $API_KEY" \
 curl -i "https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev/"
 ```
 
-`GET /api/dashboard` powers the status page (Access-protected, no `API_KEY`). Deprecated `GET /?json=true` still requires `API_KEY` and remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
+`GET /api/dashboard` powers the status page (Access-protected, no `API_KEY`). `GET /health` returns non-secret diagnostics (version, D1 ping, last email/webhook ops timestamps). Deprecated `GET /?json=true` still requires `API_KEY` and remains behind the dashboard Access application. Do not create a Bypass policy for `/`, because that would also bypass the dashboard. Prefer `/devices` for Home Assistant.
 
 The dashboard itself does not ask for an API key. Admin tools live at `/admin` and call `/api/simulate`, `/api/alert-config`, and `/api/test-alert` — protect those with Access (or keep them unreachable from the public internet).
 
