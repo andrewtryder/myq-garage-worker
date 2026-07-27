@@ -28,7 +28,6 @@
     "db:create": "wrangler d1 create myq-garage",
     "db:migrations:local": "wrangler d1 migrations apply myq-garage --local",
     "db:migrations:remote": "wrangler d1 migrations apply myq-garage --remote",
-    "db:migrate-from-kv": "node scripts/migrate-kv-to-d1.js",
     "deploy": "npm run frontend:build && npm run db:migrations:remote && node scripts/wrangler-deploy.js",
     "types": "wrangler types --env-interface CloudflareBindings",
     "typecheck": "tsc --noEmit && tsc --noEmit -p frontend/tsconfig.json",
