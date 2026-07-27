@@ -44,7 +44,49 @@ describe('myq-garage-worker integration tests', () => {
       };
 
       await worker.email(message, mockEnv, {} as any);
-      expect(setReject).toHaveBeenCalledWith('Unsupported sender');
+      expect(setReject).not.toHaveBeenCalled();
+      expect(d1State.door_events.length).toBe(0);
+    });
+
+    it('accepts Gmail-forwarded myQ mail when ALLOWED_FORWARD_FROM matches', async () => {
+      const mockEnv: any = baseEnv({
+        ALLOWED_FORWARD_FROM: 'user@gmail.com',
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      });
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'user@gmail.com',
+        to: 'garage@example.com',
+        setReject,
+        headers: new Headers({
+          from: 'myQ <notification@myq.com>',
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'message-id': '<forwarded@example.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).not.toHaveBeenCalled();
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+    });
+
+    it('drops Gmail-forwarded mail without ALLOWED_FORWARD_FROM', async () => {
+      const mockEnv: any = baseEnv({
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      });
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'user@gmail.com',
+        to: 'garage@example.com',
+        setReject,
+        headers: new Headers({
+          from: 'notification@myq.com',
+          subject: 'myQ Notification: Garage Door Left just opened',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).not.toHaveBeenCalled();
       expect(d1State.door_events.length).toBe(0);
     });
 

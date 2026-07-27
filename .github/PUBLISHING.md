@@ -20,6 +20,7 @@ In **Settings → Secrets and variables → Actions**:
 | `CLOUDFLARE_ACCOUNT_ID` | Secret   | Cloudflare account for CI deploys        |
 | `API_KEY`               | Secret   | Home Assistant `GET /devices` Bearer key |
 | `ALLOWED_EMAIL_TO`      | Secret   | Exact inbound Email Routing recipient    |
+| `ALLOWED_FORWARD_FROM`  | Secret   | Gmail (or other) forwarder envelope From |
 | `GARAGE_DOORS`          | Secret   | JSON door name → D1 door id mapping      |
 | `D1_DATABASE_ID`        | Variable | D1 database id (injected at deploy time) |
 
