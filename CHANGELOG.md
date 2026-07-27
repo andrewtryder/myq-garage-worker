@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.1.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.0.1...myq-garage-worker-v1.1.0) (2026-07-27)
+
+
+### Features
+
+* harden production worker auth, email, webhooks, and CI ([c9b7e06](https://github.com/andrewtryder/myq-garage-worker/commit/c9b7e0693e7fadb4526f5575e11b47fc8a22cdd0))
+* harden production worker auth, email, webhooks, and CI ([863ccbb](https://github.com/andrewtryder/myq-garage-worker/commit/863ccbb383a15f68007f359278d193ce113886c4))
+* migrate garage state from KV to D1 ([3a7a037](https://github.com/andrewtryder/myq-garage-worker/commit/3a7a037bdf991f583673f42395329f3b516728f4))
+* migrate garage state from KV to D1 ([81a04d9](https://github.com/andrewtryder/myq-garage-worker/commit/81a04d9adbe7c27bd0bb0958b50f211fbcdb43aa))
+* serve dashboard via Workers Static Assets ([4768ac3](https://github.com/andrewtryder/myq-garage-worker/commit/4768ac3b30e133ef2f0d4df9a8a2bea7fb478fc0))
+* serve dashboard via Workers Static Assets ([2a2605a](https://github.com/andrewtryder/myq-garage-worker/commit/2a2605a9417997e73c4f7debc3daa2c0204c1efb))
+
+
+### Bug Fixes
+
+* abort pending Message-ID on soft email failures ([4c013c4](https://github.com/andrewtryder/myq-garage-worker/commit/4c013c45f582d4fa89e3b2bdd88472edaacc1375))
+* address PR review history, Message-ID, latch, and deploy gaps ([a719171](https://github.com/andrewtryder/myq-garage-worker/commit/a7191718b0edcb9caebbc7c71d70a133cd49a82e))
+* clear pending Message-ID markers on soft email failures ([260a0f3](https://github.com/andrewtryder/myq-garage-worker/commit/260a0f36dc2ce22c82134a9a1f20ac6f9378bff5))
+* keep deploy wrangler config in project root ([f66f865](https://github.com/andrewtryder/myq-garage-worker/commit/f66f865e0f4f11f8d3632d83a7f000bf8fddab32))
+
 ## [1.0.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.0.0...myq-garage-worker-v1.0.1) (2026-06-19)
 
 ### Performance Improvements
