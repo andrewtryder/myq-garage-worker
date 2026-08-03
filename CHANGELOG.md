@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.2.0...myq-garage-worker-v1.2.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* Gmail CAF plus-address matching + CHANGELOG format ([2416cd7](https://github.com/andrewtryder/myq-garage-worker/commit/2416cd77fe156c6bceb6d82d7668b0fdf68a0b0c))
+* match Gmail CAF plus-address envelopes ([0f6e06b](https://github.com/andrewtryder/myq-garage-worker/commit/0f6e06b9ffcefcbcaa64cd0ca42f8175d76d2866))
+
 ## [1.2.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.1.0...myq-garage-worker-v1.2.0) (2026-08-03)
 
 ### Features
