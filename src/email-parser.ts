@@ -83,13 +83,19 @@ function parseAllowedForwardFromList(raw: string): string[] {
     .filter((part): part is string => Boolean(part));
 }
 
-/** Gmail ignores dots in the local part; treat a.b@gmail.com ≡ ab@gmail.com. */
+/**
+ * Gmail local-part equivalence key: dots are insignificant, +tags are ignored,
+ * and googlemail.com ≡ gmail.com. Covers CAF bounce/forward forms like
+ * atr000+caf_=myq=mrcoffee.org@gmail.com.
+ */
 function gmailLocalKey(address: string): string | null {
   const at = address.lastIndexOf('@');
   if (at <= 0) return null;
-  const local = address.slice(0, at);
+  let local = address.slice(0, at);
   const domain = address.slice(at + 1);
   if (domain !== 'gmail.com' && domain !== 'googlemail.com') return null;
+  const plus = local.indexOf('+');
+  if (plus >= 0) local = local.slice(0, plus);
   return `${local.replace(/\./g, '')}@gmail.com`;
 }
 

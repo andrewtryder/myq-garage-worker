@@ -215,6 +215,16 @@ describe('email-parser unit tests', () => {
       ).toBe(true);
     });
 
+    it('treats Gmail plus-address / CAF local-parts as the same account', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'atr000+caf_=myq=mrcoffee.org@gmail.com',
+          headerFrom: 'notification@myq.com',
+          allowedForwardFrom: 'atr000@gmail.com',
+        }),
+      ).toBe(true);
+    });
+
     it('rejects forwarder envelope when header From and subject are not myQ', () => {
       expect(
         isAcceptableMyQSender({
