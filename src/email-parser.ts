@@ -52,14 +52,29 @@ export interface AcceptableMyQSenderInput {
   envelopeFrom: string;
   headerFrom: string | null | undefined;
   allowedForwardFrom: string | undefined;
+  /** Optional subject; used when Gmail rewrites header From but keeps the myQ subject. */
+  subject?: string | null;
+}
+
+/**
+ * Normalize an envelope MAIL FROM to a bare lowercase address when possible.
+ */
+export function normalizeMaybeAddress(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const parsed = parseAddressFromHeader(raw);
+  if (parsed) return parsed;
+  const normalized = normalizeEnvelopeAddress(raw);
+  return normalized.includes('@') ? normalized : null;
 }
 
 /**
  * Accept direct myQ envelope MAIL FROM, or a configured forwarder envelope
- * whose header From is exactly notification@myq.com.
+ * whose header From is notification@myq.com (or whose subject is a myQ notification
+ * when the forwarder rewrites From).
  */
 export function isAcceptableMyQSender(input: AcceptableMyQSenderInput): boolean {
-  if (isMyQEnvelopeSender(input.envelopeFrom)) {
+  const envelope = normalizeMaybeAddress(input.envelopeFrom);
+  if (envelope === MYQ_ENVELOPE_SENDER) {
     return true;
   }
 
@@ -67,10 +82,17 @@ export function isAcceptableMyQSender(input: AcceptableMyQSenderInput): boolean 
     return false;
   }
 
-  return (
-    normalizeEnvelopeAddress(input.envelopeFrom) ===
-      normalizeEnvelopeAddress(input.allowedForwardFrom) && isMyQHeaderFrom(input.headerFrom)
-  );
+  const allowed = normalizeMaybeAddress(input.allowedForwardFrom);
+  if (!envelope || !allowed || envelope !== allowed) {
+    return false;
+  }
+
+  if (isMyQHeaderFrom(input.headerFrom)) {
+    return true;
+  }
+
+  // Gmail filter forward sometimes rewrites From to the account address.
+  return Boolean(input.subject && parseMyQSubject(input.subject));
 }
 
 export function isAllowedRecipient(to: string, allowedEmailTo: string | undefined): boolean {

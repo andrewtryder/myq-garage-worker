@@ -70,6 +70,52 @@ describe('myq-garage-worker integration tests', () => {
       expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
     });
 
+    it('accepts Gmail forward when From is rewritten but subject is myQ', async () => {
+      const mockEnv: any = baseEnv({
+        ALLOWED_FORWARD_FROM: 'user@gmail.com',
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      });
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'user@gmail.com',
+        to: 'garage@example.com',
+        setReject,
+        headers: new Headers({
+          from: 'user@gmail.com',
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'message-id': '<rewritten-from@example.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).not.toHaveBeenCalled();
+      expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
+    });
+
+    it('records envelope details when dropping unsupported senders', async () => {
+      const mockEnv: any = baseEnv({
+        ALLOWED_FORWARD_FROM: 'user@gmail.com',
+      });
+      const setReject = vi.fn();
+      const message: any = {
+        from: 'other@gmail.com',
+        to: 'garage@example.com',
+        setReject,
+        headers: new Headers({
+          from: 'notification@myq.com',
+          subject: 'myQ Notification: Garage Door Left just opened',
+          'return-path': '<other@gmail.com>',
+        }),
+      };
+
+      await worker.email(message, mockEnv, {} as any);
+      expect(setReject).not.toHaveBeenCalled();
+      const reject = d1State.ops_events.find((e: any) => e.kind === 'email_reject');
+      expect(reject?.detail).toContain('unsupported_sender');
+      expect(reject?.detail).toContain('envelope=other@gmail.com');
+      expect(reject?.detail).toContain('header=notification@myq.com');
+    });
+
     it('drops Gmail-forwarded mail without ALLOWED_FORWARD_FROM', async () => {
       const mockEnv: any = baseEnv({
         GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
@@ -182,18 +228,24 @@ describe('myq-garage-worker integration tests', () => {
         EVENT_TIME_SKEW_HOURS: '6',
       });
 
+      const newerAt = new Date(Date.now() - 30 * 60 * 1000); // 30m ago
+      const olderAt = new Date(Date.now() - 90 * 60 * 1000); // 90m ago
+      // RFC 5322 Date has second precision; ordering uses the parsed ISO.
+      const newerIso = new Date(newerAt.toUTCString()).toISOString();
+      const olderIso = new Date(olderAt.toUTCString()).toISOString();
+
       const newer: any = {
         from: 'notification@myq.com',
         setReject: vi.fn(),
         headers: new Headers({
           subject: 'myQ Notification: Garage Door Left just opened',
           'message-id': '<open-newer@example.com>',
-          date: 'Mon, 27 Jul 2026 15:00:00 -0400', // 19:00Z
+          date: newerAt.toUTCString(),
         }),
       };
       await worker.email(newer, mockEnv, {} as any);
       expect(d1State.doors.get('garage-left')?.current_status).toBe('OPEN');
-      expect(d1State.doors.get('garage-left')?.updated_at).toBe('2026-07-27T19:00:00.000Z');
+      expect(d1State.doors.get('garage-left')?.updated_at).toBe(newerIso);
 
       const delayedOlder: any = {
         from: 'notification@myq.com',
@@ -201,7 +253,7 @@ describe('myq-garage-worker integration tests', () => {
         headers: new Headers({
           subject: 'myQ Notification: Garage Door Left just closed',
           'message-id': '<close-older@example.com>',
-          date: 'Mon, 27 Jul 2026 14:00:00 -0400', // 18:00Z
+          date: olderAt.toUTCString(),
         }),
       };
       await worker.email(delayedOlder, mockEnv, {} as any);
