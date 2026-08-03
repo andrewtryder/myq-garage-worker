@@ -97,33 +97,41 @@ function readArgsFromDom(): WebhookArgument[] {
   return args;
 }
 
-function renderDoorAlertCards(): void {
-  const grid = document.getElementById('door-alerts-grid');
-  if (!grid) return;
+function renderDoorAlertRows(): void {
+  const list = document.getElementById('door-alerts-list');
+  if (!list) return;
   if (doorSettings.length === 0) {
-    grid.innerHTML = '<p class="empty">No doors configured.</p>';
+    list.innerHTML = '<p class="empty">No doors configured.</p>';
     return;
   }
 
-  grid.innerHTML = doorSettings
+  list.innerHTML = doorSettings
     .map((door) => {
       const on = door.alertsEnabled;
       return `
-        <article class="admin-door-card" data-door-id="${escapeHtml(door.doorId)}">
-          <div class="door-header">
+        <div class="door-alert-row" data-door-id="${escapeHtml(door.doorId)}">
+          <div class="door-alert-row-main">
             <div class="door-title">
               ${icons.door()}
-              <h3 class="door-name">${escapeHtml(door.doorName)}</h3>
+              <span class="door-name">${escapeHtml(door.doorName)}</span>
             </div>
-            <button
-              type="button"
-              class="alert-toggle ${on ? 'on' : 'off'}"
-              data-door-id="${escapeHtml(door.doorId)}"
-              aria-pressed="${on ? 'true' : 'false'}"
+            <span
+              class="status-pill ${on ? 'status-closed' : 'status-open'}"
+              aria-label="${on ? 'Alerts on' : 'Alerts off'}"
             >
               ${on ? icons.bell() : icons.bellOff()}
               <span>${on ? 'Alerts on' : 'Alerts off'}</span>
-            </button>
+            </span>
+            <label class="switch" title="Enable alerts">
+              <input
+                type="checkbox"
+                class="door-alert-switch"
+                data-door-id="${escapeHtml(door.doorId)}"
+                ${on ? 'checked' : ''}
+                aria-label="Enable alerts for ${escapeHtml(door.doorName)}"
+              />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
           </div>
           <div class="door-alert-fields">
             <div>
@@ -150,7 +158,7 @@ function renderDoorAlertCards(): void {
               />
             </div>
           </div>
-        </article>`;
+        </div>`;
     })
     .join('');
 }
@@ -163,10 +171,14 @@ function collectDoorSettingsFromDom(): DoorAlertSettings[] {
     const remindEl = document.querySelector<HTMLInputElement>(
       `.door-remind[data-door-id="${CSS.escape(door.doorId)}"]`,
     );
+    const switchEl = document.querySelector<HTMLInputElement>(
+      `.door-alert-switch[data-door-id="${CSS.escape(door.doorId)}"]`,
+    );
     const notifyAfterMinutes = Number(notifyEl?.value ?? door.notifyAfterMinutes);
     const remindRaw = Number(remindEl?.value ?? door.reminderIntervalMinutes ?? 0);
     return {
       ...door,
+      alertsEnabled: switchEl?.checked ?? door.alertsEnabled,
       notifyAfterMinutes: Number.isFinite(notifyAfterMinutes) ? notifyAfterMinutes : 30,
       reminderIntervalMinutes: !Number.isFinite(remindRaw) || remindRaw <= 0 ? null : remindRaw,
     };
@@ -221,7 +233,7 @@ async function loadAdmin(): Promise<void> {
     fillDoorSelect(alertDoor, data.doorNames);
     fillDoorSelect(simDoor, data.doorNames);
     doorSettings = data.doors ?? [];
-    renderDoorAlertCards();
+    renderDoorAlertRows();
 
     if (data.config) {
       meta.textContent = `Webhook configured · ${data.config.method} · ${data.config.contentType}`;
@@ -255,7 +267,9 @@ function wireAdminActions(): void {
   const alertDoor = document.getElementById('alertDoor') as HTMLSelectElement | null;
   const argAddBtn = document.getElementById('argAddBtn');
   const argsList = document.getElementById('argsList');
-  const doorGrid = document.getElementById('door-alerts-grid');
+  const doorList = document.getElementById('door-alerts-list');
+  const doorSaveBtn = document.getElementById('doorAlertsSaveBtn');
+  const doorAlertsResult = document.getElementById('doorAlertsResult');
 
   methodSelect?.addEventListener('change', syncContentTypeVisibility);
 
@@ -275,34 +289,47 @@ function wireAdminActions(): void {
     renderArgs();
   });
 
-  doorGrid?.addEventListener('click', async (event) => {
+  doorList?.addEventListener('change', (event) => {
     const target = event.target as HTMLElement;
-    const btn = target.closest('.alert-toggle') as HTMLButtonElement | null;
-    if (!btn || !alertResult) return;
-    const doorId = btn.dataset.doorId;
-    if (!doorId) return;
-    const door = doorSettings.find((d) => d.doorId === doorId);
-    if (!door) return;
+    if (!(target instanceof HTMLInputElement) || !target.classList.contains('door-alert-switch')) {
+      return;
+    }
+    doorSettings = collectDoorSettingsFromDom();
+    renderDoorAlertRows();
+  });
 
-    const nextEnabled = !door.alertsEnabled;
-    door.alertsEnabled = nextEnabled;
-    renderDoorAlertCards();
-
+  doorSaveBtn?.addEventListener('click', async () => {
+    if (!doorAlertsResult) return;
+    const doors = collectDoorSettingsFromDom();
+    doorSettings = doors;
+    doorSaveBtn.setAttribute('disabled', 'true');
     try {
-      const data = await apiFetch<{ success: boolean; door: DoorAlertSettings }>(
-        `/api/doors/${encodeURIComponent(doorId)}/alerts`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ enabled: nextEnabled }),
-        },
-      );
-      const idx = doorSettings.findIndex((d) => d.doorId === doorId);
-      if (idx >= 0) doorSettings[idx] = data.door;
-      renderDoorAlertCards();
+      const updated: DoorAlertSettings[] = [];
+      for (const door of doors) {
+        const data = await apiFetch<{ success: boolean; door: DoorAlertSettings }>(
+          `/api/doors/${encodeURIComponent(door.doorId)}/alerts`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              enabled: door.alertsEnabled,
+              notifyAfterMinutes: door.notifyAfterMinutes,
+              reminderIntervalMinutes: door.reminderIntervalMinutes,
+            }),
+          },
+        );
+        updated.push(data.door);
+      }
+      doorSettings = updated;
+      renderDoorAlertRows();
+      showResult(doorAlertsResult, 'Door alerts saved.', false);
     } catch (err) {
-      door.alertsEnabled = !nextEnabled;
-      renderDoorAlertCards();
-      showResult(alertResult, err instanceof ApiError ? err.message : 'Toggle failed', true);
+      showResult(
+        doorAlertsResult,
+        err instanceof ApiError ? err.message : 'Failed to save door alerts',
+        true,
+      );
+    } finally {
+      doorSaveBtn.removeAttribute('disabled');
     }
   });
 
@@ -314,34 +341,22 @@ function wireAdminActions(): void {
       return;
     }
 
-    const doors = collectDoorSettingsFromDom();
-    doorSettings = doors;
-
     try {
       const body: Record<string, unknown> = {
         method: methodSelect.value,
         contentType: contentType.value,
         arguments: readArgsFromDom(),
-        doors: doors.map((d) => ({
-          doorId: d.doorId,
-          alertsEnabled: d.alertsEnabled,
-          notifyAfterMinutes: d.notifyAfterMinutes,
-          reminderIntervalMinutes: d.reminderIntervalMinutes,
-        })),
       };
       if (webhookUrl) body.webhookUrl = webhookUrl;
 
       const data = await apiFetch<{
         success: boolean;
         config: PublicAlertConfig;
-        doors: DoorAlertSettings[];
       }>('/api/alert-config', { method: 'POST', body: JSON.stringify(body) });
       webhookInput.value = '';
       webhookInput.dataset.hasSaved = 'true';
       webhookInput.placeholder = `${data.config.webhookUrl} (saved — enter a new URL to replace)`;
-      if (data.doors) doorSettings = data.doors;
-      renderDoorAlertCards();
-      showResult(alertResult, 'Configuration saved.', false);
+      showResult(alertResult, 'Webhook configuration saved.', false);
     } catch (err) {
       showResult(alertResult, err instanceof ApiError ? err.message : 'Save failed', true);
     }
