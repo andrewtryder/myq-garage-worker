@@ -58,19 +58,54 @@ export interface AcceptableMyQSenderInput {
 
 /**
  * Normalize an envelope MAIL FROM to a bare lowercase address when possible.
+ * Also unwraps common SRS0 rewrite forms used by forwarders.
  */
 export function normalizeMaybeAddress(raw: string | null | undefined): string | null {
   if (typeof raw !== 'string' || !raw.trim()) return null;
-  const parsed = parseAddressFromHeader(raw);
+  const trimmed = raw.trim();
+
+  // SRS0=HHH=TT=domain=local@forwarder-host
+  const srs = trimmed.match(/SRS0=[^=\s]+=[^=\s]+=([^=\s]+)=([^@\s]+)@/i);
+  if (srs) {
+    return normalizeEnvelopeAddress(`${srs[2]}@${srs[1]}`);
+  }
+
+  const parsed = parseAddressFromHeader(trimmed);
   if (parsed) return parsed;
-  const normalized = normalizeEnvelopeAddress(raw);
+  const normalized = normalizeEnvelopeAddress(trimmed);
   return normalized.includes('@') ? normalized : null;
+}
+
+function parseAllowedForwardFromList(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((part) => normalizeMaybeAddress(part))
+    .filter((part): part is string => Boolean(part));
+}
+
+/** Gmail ignores dots in the local part; treat a.b@gmail.com ≡ ab@gmail.com. */
+function gmailLocalKey(address: string): string | null {
+  const at = address.lastIndexOf('@');
+  if (at <= 0) return null;
+  const local = address.slice(0, at);
+  const domain = address.slice(at + 1);
+  if (domain !== 'gmail.com' && domain !== 'googlemail.com') return null;
+  return `${local.replace(/\./g, '')}@gmail.com`;
+}
+
+function envelopeMatchesAllowed(envelope: string, allowedList: string[]): boolean {
+  if (allowedList.includes(envelope)) return true;
+  const envelopeGmail = gmailLocalKey(envelope);
+  if (!envelopeGmail) return false;
+  return allowedList.some((allowed) => gmailLocalKey(allowed) === envelopeGmail);
 }
 
 /**
  * Accept direct myQ envelope MAIL FROM, or a configured forwarder envelope
  * whose header From is notification@myq.com (or whose subject is a myQ notification
  * when the forwarder rewrites From).
+ *
+ * `allowedForwardFrom` may be a comma-separated list of addresses.
  */
 export function isAcceptableMyQSender(input: AcceptableMyQSenderInput): boolean {
   const envelope = normalizeMaybeAddress(input.envelopeFrom);
@@ -82,8 +117,8 @@ export function isAcceptableMyQSender(input: AcceptableMyQSenderInput): boolean 
     return false;
   }
 
-  const allowed = normalizeMaybeAddress(input.allowedForwardFrom);
-  if (!envelope || !allowed || envelope !== allowed) {
+  const allowedList = parseAllowedForwardFromList(input.allowedForwardFrom);
+  if (!envelope || allowedList.length === 0 || !envelopeMatchesAllowed(envelope, allowedList)) {
     return false;
   }
 
