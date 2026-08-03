@@ -195,6 +195,26 @@ describe('email-parser unit tests', () => {
       ).toBe(false);
     });
 
+    it('accepts comma-separated ALLOWED_FORWARD_FROM and SRS envelopes', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'SRS0=ab=CD=gmail.com=atr000@bounces.example.com',
+          headerFrom: 'notification@myq.com',
+          allowedForwardFrom: 'other@example.com,atr000@gmail.com',
+        }),
+      ).toBe(true);
+    });
+
+    it('treats Gmail local-part dots as insignificant', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'a.tr000@gmail.com',
+          headerFrom: 'notification@myq.com',
+          allowedForwardFrom: 'atr000@gmail.com',
+        }),
+      ).toBe(true);
+    });
+
     it('rejects forwarder envelope when header From and subject are not myQ', () => {
       expect(
         isAcceptableMyQSender({

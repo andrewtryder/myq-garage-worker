@@ -108,13 +108,14 @@ export async function saveDoorState(
 
   const statements: D1PreparedStatement[] = [];
   let updateIndex: number;
+  const writeId = crypto.randomUUID();
 
   if (messageIdHash) {
     statements.push(
       env.GARAGE_DB.prepare(
-        `INSERT OR IGNORE INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(doorKey, value, occurredAt, receivedAt, messageIdHash, source),
+        `INSERT OR IGNORE INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source, write_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(doorKey, value, occurredAt, receivedAt, messageIdHash, source, writeId),
     );
     updateIndex = statements.length;
     statements.push(
@@ -125,29 +126,18 @@ export async function saveDoorState(
            AND (updated_at IS NULL OR updated_at <= ?)
            AND EXISTS (
              SELECT 1 FROM door_events
-             WHERE message_id_hash = ?
-               AND occurred_at = ?
-               AND received_at = ?
+             WHERE write_id = ?
            )`,
-      ).bind(
-        value,
-        stateSince,
-        occurredAt,
-        doorKey,
-        occurredAt,
-        messageIdHash,
-        occurredAt,
-        receivedAt,
-      ),
+      ).bind(value, stateSince, occurredAt, doorKey, occurredAt, writeId),
     );
   } else {
     const shouldAppend = !(value === existing.value && createdAt === existing.createdAt);
     if (shouldAppend) {
       statements.push(
         env.GARAGE_DB.prepare(
-          `INSERT INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source)
-           VALUES (?, ?, ?, ?, NULL, ?)`,
-        ).bind(doorKey, value, occurredAt, receivedAt, source),
+          `INSERT INTO door_events (door_id, status, occurred_at, received_at, message_id_hash, source, write_id)
+           VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+        ).bind(doorKey, value, occurredAt, receivedAt, source, writeId),
       );
     }
     updateIndex = statements.length;

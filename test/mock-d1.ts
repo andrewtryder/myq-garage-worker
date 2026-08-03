@@ -69,14 +69,13 @@ export function createMockD1(state = createState()) {
         }
         changes = 1;
       } else if (normalized.startsWith('INSERT OR IGNORE INTO door_events')) {
-        const [doorId, status, occurredAt, receivedAt, messageIdHash, source] = bound as [
-          string,
-          string,
-          string,
-          string,
-          string | null,
-          string,
-        ];
+        const doorId = String(bound[0]);
+        const status = String(bound[1]);
+        const occurredAt = String(bound[2]);
+        const receivedAt = String(bound[3]);
+        const messageIdHash = bound[4] as string | null;
+        const source = String(bound[5]);
+        const writeId = bound.length > 6 ? String(bound[6]) : '';
         if (
           messageIdHash &&
           state.door_events.some((event) => event.message_id_hash === messageIdHash)
@@ -91,6 +90,7 @@ export function createMockD1(state = createState()) {
             received_at: receivedAt,
             message_id_hash: messageIdHash,
             source,
+            write_id: writeId,
           });
           changes = 1;
         }
@@ -99,7 +99,8 @@ export function createMockD1(state = createState()) {
         const status = String(bound[1]);
         const occurredAt = String(bound[2]);
         const receivedAt = String(bound[3]);
-        const source = String(bound[bound.length - 1]);
+        const source = String(bound[bound.length - 2]);
+        const writeId = String(bound[bound.length - 1]);
         state.door_events.push({
           id: state.nextEventId++,
           door_id: doorId,
@@ -108,6 +109,7 @@ export function createMockD1(state = createState()) {
           received_at: receivedAt,
           message_id_hash: null,
           source,
+          write_id: writeId,
         });
         changes = 1;
       } else if (normalized.startsWith('UPDATE doors')) {
@@ -122,18 +124,8 @@ export function createMockD1(state = createState()) {
           const chronologyOk = currentUpdated === null || currentUpdated <= eventTime;
           let existsOk = true;
           if (normalized.includes('EXISTS')) {
-            const messageIdHash = String(bound[5]);
-            const occurredAt = String(bound[6]);
-            const receivedAt = bound.length > 7 ? String(bound[7]) : null;
-            existsOk = state.door_events.some((event) => {
-              if (event.message_id_hash !== messageIdHash || event.occurred_at !== occurredAt) {
-                return false;
-              }
-              if (receivedAt != null) {
-                return String(event.received_at ?? '') === receivedAt;
-              }
-              return true;
-            });
+            const writeId = String(bound[5]);
+            existsOk = state.door_events.some((event) => String(event.write_id ?? '') === writeId);
           }
           if (chronologyOk && existsOk) {
             door.current_status = status;
