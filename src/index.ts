@@ -6,6 +6,8 @@ import {
   isAcceptableMyQSender,
   isAllowedRecipient,
   mapActionToStatus,
+  normalizeMaybeAddress,
+  parseAddressFromHeader,
   parseMyQSubject,
   resolveDoorKey,
 } from './email-parser';
@@ -169,17 +171,36 @@ export default {
   async email(message: ForwardableEmailMessage, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
       const sender = typeof message.from === 'string' ? message.from : '';
+      const headerFrom = message.headers.get('from');
+      const subject = message.headers.get('subject') || '';
+      const returnPath = message.headers.get('return-path');
       const { allowedEmailTo, allowedForwardFrom, eventTimeSkewHours } = loadConfig(env);
-      if (
-        !isAcceptableMyQSender({
+
+      const senderOk =
+        isAcceptableMyQSender({
           envelopeFrom: sender,
-          headerFrom: message.headers.get('from'),
+          headerFrom,
           allowedForwardFrom,
-        })
-      ) {
+          subject,
+        }) ||
+        // Some forwarders put the account address on Return-Path while rewriting MAIL FROM.
+        (Boolean(allowedForwardFrom) &&
+          isAcceptableMyQSender({
+            envelopeFrom: returnPath ?? '',
+            headerFrom,
+            allowedForwardFrom,
+            subject,
+          }));
+
+      if (!senderOk) {
         // Silent drop: avoid SMTP 555 bounces (e.g. Gmail CAF) for probes / misconfigured forwards.
-        console.log('Unsupported sender, dropping:', sender);
-        await recordOpsEvent(env, 'email_reject', { detail: 'unsupported_sender' });
+        const envelope = normalizeMaybeAddress(sender) || sender.trim() || '(empty)';
+        const header = parseAddressFromHeader(headerFrom) || headerFrom?.trim() || '(none)';
+        const rp = normalizeMaybeAddress(returnPath) || returnPath?.trim() || '(none)';
+        console.log('Unsupported sender, dropping:', { envelope, header, returnPath: rp });
+        await recordOpsEvent(env, 'email_reject', {
+          detail: `unsupported_sender envelope=${envelope} header=${header} return_path=${rp}`,
+        });
         return;
       }
 
@@ -197,7 +218,6 @@ export default {
       }
 
       const messageId = message.headers.get('message-id');
-      const subject = message.headers.get('subject') || '';
       console.log('Subject:', subject);
 
       const parsed = parseMyQSubject(subject);

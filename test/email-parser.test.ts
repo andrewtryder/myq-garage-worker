@@ -164,6 +164,17 @@ describe('email-parser unit tests', () => {
       ).toBe(true);
     });
 
+    it('accepts configured forwarder when From is rewritten but subject is myQ', () => {
+      expect(
+        isAcceptableMyQSender({
+          envelopeFrom: 'user@gmail.com',
+          headerFrom: 'user@gmail.com',
+          allowedForwardFrom: 'user@gmail.com',
+          subject: 'myQ Notification: Garage Door Left just opened',
+        }),
+      ).toBe(true);
+    });
+
     it('rejects Gmail envelope without ALLOWED_FORWARD_FROM', () => {
       expect(
         isAcceptableMyQSender({
@@ -184,12 +195,13 @@ describe('email-parser unit tests', () => {
       ).toBe(false);
     });
 
-    it('rejects forwarder envelope when header From is not myQ', () => {
+    it('rejects forwarder envelope when header From and subject are not myQ', () => {
       expect(
         isAcceptableMyQSender({
           envelopeFrom: 'user@gmail.com',
           headerFrom: 'user@gmail.com',
           allowedForwardFrom: 'user@gmail.com',
+          subject: 'Hello world',
         }),
       ).toBe(false);
     });
