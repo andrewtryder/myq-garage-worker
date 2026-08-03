@@ -127,6 +127,9 @@ describe('buildDashboard', () => {
       status: 'CLOSED',
       lastEmailAt: '2026-07-26T19:10:00.000Z',
       stale: false,
+      alertsEnabled: false,
+      notifyAfterMinutes: 30,
+      reminderIntervalMinutes: null,
     });
   });
 });

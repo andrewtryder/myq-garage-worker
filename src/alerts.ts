@@ -1,8 +1,9 @@
-import { AlertConfig, getAlertConfig } from './alert-config';
+import { AlertConfig, getAlertConfig, getDoorAlertSettings } from './alert-config';
 import { loadConfig } from './config';
 import { formatDuration } from './format';
 import { getAlertLatch, getDoorState, setAlertLatch } from './storage';
 import { Env } from './types';
+import { buildWebhookRequest, PlaceholderContext } from './webhook-payload';
 import { WEBHOOK_FETCH_TIMEOUT_MS } from './webhook-url';
 
 export interface AlertPayload {
@@ -12,6 +13,7 @@ export interface AlertPayload {
   state: string;
   durationMs: number;
   durationText: string;
+  timestamp: string;
 }
 
 export interface AlertResult {
@@ -19,33 +21,50 @@ export interface AlertResult {
   sent: boolean;
   payload?: AlertPayload;
   webhookStatus?: number;
+  responseBody?: string;
   skippedReason?: string;
   error?: string;
 }
 
+const RESPONSE_BODY_MAX = 2000;
+
+async function readResponseBody(response: Response): Promise<string | undefined> {
+  try {
+    const text = await response.text();
+    if (!text) return undefined;
+    return text.length > RESPONSE_BODY_MAX ? `${text.slice(0, RESPONSE_BODY_MAX)}…` : text;
+  } catch {
+    return undefined;
+  }
+}
+
+function contextFromPayload(payload: AlertPayload): PlaceholderContext {
+  return {
+    door: payload.door,
+    state: payload.state,
+    minutes: payload.durationText,
+    timestamp: payload.timestamp,
+  };
+}
+
 export async function sendWebhook(config: AlertConfig, payload: AlertPayload): Promise<Response> {
+  const built = buildWebhookRequest({
+    webhookUrl: config.webhookUrl,
+    method: config.method,
+    contentType: config.contentType,
+    arguments: config.arguments,
+    context: contextFromPayload(payload),
+  });
+
   const init: RequestInit = {
+    method: built.method,
     redirect: 'manual',
     signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS),
   };
+  if (built.headers) init.headers = built.headers;
+  if (built.body !== undefined) init.body = built.body;
 
-  if (config.method === 'GET') {
-    const url = new URL(config.webhookUrl);
-    url.searchParams.set('title', payload.title);
-    url.searchParams.set('message', payload.message);
-    url.searchParams.set('door', payload.door);
-    url.searchParams.set('state', payload.state);
-    url.searchParams.set('durationText', payload.durationText);
-    url.searchParams.set('durationMs', String(payload.durationMs));
-    return fetch(url.toString(), { ...init, method: 'GET' });
-  }
-
-  return fetch(config.webhookUrl, {
-    ...init,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return fetch(built.url, init);
 }
 
 function genericWebhookError(err: unknown): string {
@@ -59,6 +78,7 @@ function genericWebhookError(err: unknown): string {
 }
 
 export async function testAlert(config: AlertConfig, doorName?: string): Promise<AlertResult> {
+  const nowIso = new Date().toISOString();
   const payload: AlertPayload = {
     title: 'Garage Door Alert',
     message: doorName
@@ -68,16 +88,19 @@ export async function testAlert(config: AlertConfig, doorName?: string): Promise
     state: 'OPEN',
     durationMs: 0,
     durationText: 'Test',
+    timestamp: nowIso,
   };
 
   try {
     const response = await sendWebhook(config, payload);
+    const responseBody = await readResponseBody(response);
     if (response.status >= 300 && response.status < 400) {
       return {
         door: payload.door,
         sent: false,
         payload,
         webhookStatus: response.status,
+        responseBody,
         skippedReason: 'Webhook redirects are not allowed',
       };
     }
@@ -86,6 +109,7 @@ export async function testAlert(config: AlertConfig, doorName?: string): Promise
       sent: response.ok,
       payload,
       webhookStatus: response.status,
+      responseBody,
       skippedReason: response.ok ? undefined : `Webhook returned HTTP ${response.status}`,
     };
   } catch (err) {
@@ -98,11 +122,11 @@ export async function testAlert(config: AlertConfig, doorName?: string): Promise
   }
 }
 
-function shouldSendAlert(
+export function shouldSendAlert(
   latch: { openCreatedAt: string; lastAlertSentAt: string } | null,
   openCreatedAt: string,
   nowMs: number,
-  reminderMinutes: number | undefined,
+  reminderMinutes: number | null | undefined,
 ): { send: boolean; reason?: string } {
   if (!latch || latch.openCreatedAt !== openCreatedAt) {
     return { send: true };
@@ -134,8 +158,6 @@ export async function runOpenDoorAlerts(
     return [{ door: '', sent: false, skippedReason: 'Alert webhook not configured' }];
   }
 
-  const thresholdMinutes = config.thresholdMinutes;
-  const thresholdMs = thresholdMinutes * 60 * 1000;
   const nowMs = options?.nowMs ?? Date.now();
   const { garageDoors } = loadConfig(env);
   const results: AlertResult[] = [];
@@ -149,6 +171,20 @@ export async function runOpenDoorAlerts(
   }
 
   for (const [doorName, doorKey] of doorsToCheck) {
+    const force = !!options?.forceDoorName;
+
+    if (!force) {
+      const doorAlerts = await getDoorAlertSettings(env, doorKey);
+      if (!doorAlerts?.alertsEnabled) {
+        results.push({
+          door: doorName,
+          sent: false,
+          skippedReason: 'Alerts disabled for this door',
+        });
+        continue;
+      }
+    }
+
     const state = await getDoorState(env, doorKey);
 
     if (state.value !== 'OPEN' || !state.createdAt) {
@@ -174,20 +210,34 @@ export async function runOpenDoorAlerts(
     }
 
     const durationMs = nowMs - createdAtMs;
-    const force = !!options?.forceDoorName;
+    const doorAlerts = force
+      ? {
+          alertsEnabled: true,
+          notifyAfterMinutes: 0,
+          reminderIntervalMinutes: null as number | null,
+        }
+      : await getDoorAlertSettings(env, doorKey);
+
+    const notifyAfterMinutes = doorAlerts?.notifyAfterMinutes ?? 30;
+    const thresholdMs = notifyAfterMinutes * 60 * 1000;
 
     if (!force && durationMs <= thresholdMs) {
       results.push({
         door: doorName,
         sent: false,
-        skippedReason: `Open for ${formatDuration(durationMs)} (threshold ${thresholdMinutes} min)`,
+        skippedReason: `Open for ${formatDuration(durationMs)} (threshold ${notifyAfterMinutes} min)`,
       });
       continue;
     }
 
     if (!force) {
       const latch = await getAlertLatch(env, doorKey);
-      const decision = shouldSendAlert(latch, state.createdAt, nowMs, config.reminderMinutes);
+      const decision = shouldSendAlert(
+        latch,
+        state.createdAt,
+        nowMs,
+        doorAlerts?.reminderIntervalMinutes,
+      );
       if (!decision.send) {
         results.push({
           door: doorName,
@@ -199,6 +249,7 @@ export async function runOpenDoorAlerts(
     }
 
     const durationText = formatDuration(durationMs);
+    const timestamp = new Date(nowMs).toISOString();
     const payload: AlertPayload = {
       title: 'Garage Door Alert',
       message: `${doorName} has been open for ${durationText}.`,
@@ -206,10 +257,12 @@ export async function runOpenDoorAlerts(
       state: state.value,
       durationMs,
       durationText,
+      timestamp,
     };
 
     try {
       const response = await sendWebhook(config, payload);
+      const responseBody = await readResponseBody(response);
 
       if (response.status >= 300 && response.status < 400) {
         results.push({
@@ -217,6 +270,7 @@ export async function runOpenDoorAlerts(
           sent: false,
           payload,
           webhookStatus: response.status,
+          responseBody,
           skippedReason: 'Webhook redirects are not allowed',
         });
         continue;
@@ -229,6 +283,7 @@ export async function runOpenDoorAlerts(
         sent,
         payload,
         webhookStatus: response.status,
+        responseBody,
         skippedReason: sent ? undefined : `Webhook returned HTTP ${response.status}`,
       });
 
@@ -238,7 +293,7 @@ export async function runOpenDoorAlerts(
           try {
             await setAlertLatch(env, doorKey, {
               openCreatedAt: state.createdAt,
-              lastAlertSentAt: new Date(nowMs).toISOString(),
+              lastAlertSentAt: timestamp,
             });
           } catch (error) {
             console.error('Webhook sent but latch persistence failed', error);
@@ -263,7 +318,7 @@ export async function runOpenDoorAlerts(
       {
         door: '',
         sent: false,
-        skippedReason: `No doors open past ${thresholdMinutes} min`,
+        skippedReason: 'No doors open past their notify threshold',
       },
     ];
   }

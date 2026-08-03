@@ -15,21 +15,29 @@
 
       <main>
         <h1>Administration</h1>
-        <p class="subtitle">Alerts, simulation, and diagnostics for operators.</p>
+        <p class="subtitle">Alerts, webhook delivery, and diagnostics.</p>
 
-        <section class="card" aria-labelledby="diag-heading">
-          <div class="card-header">
-            <div class="door-name" id="diag-heading">Diagnostics</div>
+        <section class="admin-section" aria-labelledby="diag-heading">
+          <h2 id="diag-heading" class="section-title">Diagnostics</h2>
+          <div id="diag-strip" class="stat-strip" aria-live="polite">
+            <p class="empty">Loading health…</p>
           </div>
-          <p id="diag-meta" class="alert-meta">Loading health…</p>
           <p class="alert-meta"><a href="/health">Full health JSON</a></p>
         </section>
 
-        <section class="card history-card">
-          <div class="card-header">
-            <div class="door-name">Alerts</div>
+        <section class="admin-section" aria-labelledby="door-alerts-heading">
+          <h2 id="door-alerts-heading" class="section-title">Door alerts</h2>
+          <div id="door-alerts-grid" class="grid">
+            <p class="empty">Loading doors…</p>
           </div>
-          <p id="alert-meta" class="alert-meta">Loading alert configuration…</p>
+        </section>
+
+        <section class="card admin-section" aria-labelledby="webhook-heading">
+          <div class="card-header">
+            <div class="door-name" id="webhook-heading">Webhook</div>
+          </div>
+          <p id="alert-meta" class="alert-meta">Loading webhook configuration…</p>
+          <p class="field-hint">Placeholders: {{door}}, {{state}}, {{minutes}}, {{timestamp}}</p>
 
           <label class="field-label" for="alertWebhookUrl">Webhook URL</label>
           <input
@@ -40,14 +48,30 @@
             data-has-saved="false"
           />
 
-          <label class="field-label" for="alertThreshold">Threshold (minutes)</label>
-          <input type="number" id="alertThreshold" min="1" value="60" class="sim-input" />
-
           <label class="field-label" for="alertMethod">HTTP method</label>
           <select id="alertMethod" class="sim-input">
-            <option value="POST">POST (JSON body)</option>
-            <option value="GET">GET (query params)</option>
+            <option value="POST">POST</option>
+            <option value="GET">GET</option>
           </select>
+
+          <div id="contentTypeWrap">
+            <label class="field-label" for="alertContentType">Content type</label>
+            <select id="alertContentType" class="sim-input">
+              <option value="application/json">application/json</option>
+              <option value="application/x-www-form-urlencoded">
+                application/x-www-form-urlencoded
+              </option>
+              <option value="text/plain">text/plain</option>
+            </select>
+          </div>
+
+          <label class="field-label">Arguments</label>
+          <div id="argsList" class="args-list"></div>
+          <div class="btn-row">
+            <button type="button" id="argAddBtn" class="sim-btn sim-btn-secondary">
+              Add argument
+            </button>
+          </div>
 
           <label class="field-label" for="alertDoor">Door (for test payload)</label>
           <select id="alertDoor" class="sim-input"></select>
@@ -61,7 +85,7 @@
           <div id="alertResult" class="result-box" hidden></div>
         </section>
 
-        <section class="card history-card">
+        <section class="card admin-section">
           <div class="card-header">
             <div class="door-name">Simulate event</div>
           </div>

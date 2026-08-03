@@ -552,11 +552,48 @@ describe('myq-garage-worker integration tests', () => {
         {} as any,
       );
       const json = (await response.json()) as {
-        config: { webhookUrl: string };
+        config: { webhookUrl: string; contentType: string };
         doorNames: string[];
+        doors: Array<{ doorId: string; alertsEnabled: boolean }>;
       };
       expect(json.config.webhookUrl).toBe('https://ntfy.sh/***');
+      expect(json.config.contentType).toBe('application/json');
       expect(json.doorNames).toContain('Garage Door Left');
+      expect(json.doors[0].doorId).toBe('garage-left');
+    });
+
+    it('POST /api/doors/:id/alerts toggles alerts_enabled', async () => {
+      d1State.doors.set('garage-left', {
+        id: 'garage-left',
+        name: 'Garage Door Left',
+        current_status: 'CLOSED',
+        state_since: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+        alerts_enabled: 0,
+        notify_after_minutes: 30,
+        reminder_interval_minutes: null,
+      });
+      const mockEnv: any = baseEnv({
+        GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+      });
+
+      const response = await worker.fetch(
+        new Request('https://worker.dev/api/doors/garage-left/alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: true }),
+        }),
+        mockEnv,
+        {} as any,
+      );
+      const json = (await response.json()) as {
+        success: boolean;
+        door: { alertsEnabled: boolean; doorId: string };
+      };
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.door.alertsEnabled).toBe(true);
+      expect(d1State.doors.get('garage-left')?.alerts_enabled).toBe(1);
     });
   });
 });

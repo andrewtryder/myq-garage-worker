@@ -26,8 +26,11 @@ export async function ensureDoor(
   const name = doorName ?? doorNameForKey(env, doorKey);
   const now = at ?? new Date().toISOString();
   await env.GARAGE_DB.prepare(
-    `INSERT INTO doors (id, name, current_status, state_since, updated_at)
-     VALUES (?, ?, 'UNKNOWN', NULL, ?)
+    `INSERT INTO doors (
+       id, name, current_status, state_since, updated_at,
+       alerts_enabled, notify_after_minutes, reminder_interval_minutes
+     )
+     VALUES (?, ?, 'UNKNOWN', NULL, ?, 0, 30, NULL)
      ON CONFLICT(id) DO UPDATE SET name = excluded.name`,
   )
     .bind(doorKey, name, now)

@@ -15,9 +15,12 @@ import { resolveOrderingTime } from './email-time';
 import { runOpenDoorAlerts, testAlert } from './alerts';
 import {
   getAlertConfig,
+  listDoorAlertSettings,
   resolveAlertConfigFromBody,
   saveAlertConfig,
+  saveDoorAlertSettingsBatch,
   toPublicAlertConfig,
+  updateDoorAlertSettings,
 } from './alert-config';
 import { buildHaDevices, loadAllDoors } from './doors';
 import { buildDashboard } from './dashboard';
@@ -43,14 +46,21 @@ const ROUTE_METHODS: Record<string, string[]> = {
   '/api/alert-config': ['GET', 'POST'],
   '/api/test-alert': ['POST'],
   '/api/simulate': ['POST'],
+  '/api/doors/:id/alerts': ['POST'],
   // Legacy aliases (prefer /api/*)
   '/simulate': ['POST'],
   '/alert-config': ['POST'],
   '/test-alert': ['POST'],
 };
 
+function matchDoorAlertsRoute(pathname: string): string | null {
+  const match = pathname.match(/^\/api\/doors\/([^/]+)\/alerts$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function matchRoute(pathname: string): string | null {
   if (pathname in ROUTE_METHODS) return pathname;
+  if (matchDoorAlertsRoute(pathname)) return '/api/doors/:id/alerts';
   return null;
 }
 
@@ -105,9 +115,10 @@ async function handleSimulate(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleAlertConfigGet(env: Env): Promise<Response> {
-  const config = await getAlertConfig(env);
+  const [config, doors] = await Promise.all([getAlertConfig(env), listDoorAlertSettings(env)]);
   return jsonResponse({
     config: toPublicAlertConfig(config),
+    doors,
     doorNames: Object.keys(loadConfig(env).garageDoors),
   });
 }
@@ -129,9 +140,120 @@ async function handleAlertConfigPost(request: Request, env: Env): Promise<Respon
       return jsonResponse({ error: 'Invalid alert configuration' }, 400);
     }
     const config = await saveAlertConfig(env, merged);
-    return jsonResponse({ success: true, config: toPublicAlertConfig(config) });
+
+    let doors = await listDoorAlertSettings(env);
+    if (Array.isArray(body.doors)) {
+      const batch: Array<{
+        doorId: string;
+        alertsEnabled: boolean;
+        notifyAfterMinutes: number;
+        reminderIntervalMinutes: number | null;
+      }> = [];
+      for (const item of body.doors) {
+        if (typeof item !== 'object' || item === null) continue;
+        const row = item as Record<string, unknown>;
+        if (typeof row.doorId !== 'string') continue;
+        const notifyAfterMinutes =
+          typeof row.notifyAfterMinutes === 'number'
+            ? row.notifyAfterMinutes
+            : parseInt(String(row.notifyAfterMinutes ?? '30'), 10);
+        if (isNaN(notifyAfterMinutes) || notifyAfterMinutes <= 0) {
+          return jsonResponse({ error: 'Invalid door alert settings' }, 400);
+        }
+        let reminderIntervalMinutes: number | null = null;
+        if (
+          row.reminderIntervalMinutes !== undefined &&
+          row.reminderIntervalMinutes !== null &&
+          row.reminderIntervalMinutes !== ''
+        ) {
+          const parsed =
+            typeof row.reminderIntervalMinutes === 'number'
+              ? row.reminderIntervalMinutes
+              : parseInt(String(row.reminderIntervalMinutes), 10);
+          if (isNaN(parsed) || parsed < 0) {
+            return jsonResponse({ error: 'Invalid door alert settings' }, 400);
+          }
+          reminderIntervalMinutes = parsed === 0 ? null : parsed;
+        }
+        batch.push({
+          doorId: row.doorId,
+          alertsEnabled: Boolean(row.alertsEnabled),
+          notifyAfterMinutes,
+          reminderIntervalMinutes,
+        });
+      }
+      doors = await saveDoorAlertSettingsBatch(env, batch);
+    }
+
+    return jsonResponse({
+      success: true,
+      config: toPublicAlertConfig(config),
+      doors,
+    });
   } catch {
     return jsonResponse({ error: 'Invalid alert configuration' }, 400);
+  }
+}
+
+async function handleDoorAlertsPost(request: Request, env: Env, doorId: string): Promise<Response> {
+  const rate = await consumeRateLimit(env, 'alert-config');
+  if (!rate.allowed) {
+    return jsonResponse({ error: 'Too many requests' }, 429);
+  }
+
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+
+  const body = parsedBody.value as Record<string, unknown>;
+  const patch: {
+    alertsEnabled?: boolean;
+    notifyAfterMinutes?: number;
+    reminderIntervalMinutes?: number | null;
+  } = {};
+
+  if (typeof body.enabled === 'boolean') patch.alertsEnabled = body.enabled;
+  if (typeof body.alertsEnabled === 'boolean') patch.alertsEnabled = body.alertsEnabled;
+  if (body.notifyAfterMinutes !== undefined) {
+    const n =
+      typeof body.notifyAfterMinutes === 'number'
+        ? body.notifyAfterMinutes
+        : parseInt(String(body.notifyAfterMinutes), 10);
+    if (isNaN(n) || n <= 0) {
+      return jsonResponse({ error: 'Invalid notifyAfterMinutes' }, 400);
+    }
+    patch.notifyAfterMinutes = n;
+  }
+  if (body.reminderIntervalMinutes !== undefined) {
+    if (body.reminderIntervalMinutes === null || body.reminderIntervalMinutes === '') {
+      patch.reminderIntervalMinutes = null;
+    } else {
+      const n =
+        typeof body.reminderIntervalMinutes === 'number'
+          ? body.reminderIntervalMinutes
+          : parseInt(String(body.reminderIntervalMinutes), 10);
+      if (isNaN(n) || n < 0) {
+        return jsonResponse({ error: 'Invalid reminderIntervalMinutes' }, 400);
+      }
+      patch.reminderIntervalMinutes = n === 0 ? null : n;
+    }
+  }
+
+  if (
+    patch.alertsEnabled === undefined &&
+    patch.notifyAfterMinutes === undefined &&
+    patch.reminderIntervalMinutes === undefined
+  ) {
+    return jsonResponse({ error: 'No alert fields to update' }, 400);
+  }
+
+  try {
+    const door = await updateDoorAlertSettings(env, doorId, patch);
+    if (!door) {
+      return jsonResponse({ error: 'Unknown door id' }, 404);
+    }
+    return jsonResponse({ success: true, door });
+  } catch {
+    return jsonResponse({ error: 'Failed to update door alerts' }, 400);
   }
 }
 
@@ -350,6 +472,12 @@ export default {
 
       if (request.method === 'POST' && (route === '/api/test-alert' || route === '/test-alert')) {
         return handleTestAlert(request, env);
+      }
+
+      if (request.method === 'POST' && route === '/api/doors/:id/alerts') {
+        const doorId = matchDoorAlertsRoute(url.pathname);
+        if (!doorId) return notFoundResponse();
+        return handleDoorAlertsPost(request, env, doorId);
       }
 
       if (request.method === 'GET' && route === '/api/dashboard') {

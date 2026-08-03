@@ -2,17 +2,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runOpenDoorAlerts, sendWebhook, testAlert } from '../src/alerts';
 import { AlertConfig } from '../src/alert-config';
+import { DEFAULT_WEBHOOK_ARGUMENTS } from '../src/webhook-payload';
 import { createMockD1 } from './mock-d1';
 
 const sampleConfig: AlertConfig = {
   webhookUrl: 'https://example.com/webhook',
-  thresholdMinutes: 60,
   method: 'POST',
+  contentType: 'application/json',
+  arguments: DEFAULT_WEBHOOK_ARGUMENTS,
 };
 
 function envWithOpenDoor(
   createdAt: string,
   extraState?: (state: any) => void,
+  alertsEnabled = true,
 ): { env: any; state: any; mockDb: any } {
   const { mockDb, state } = createMockD1();
   state.doors.set('garage-left', {
@@ -21,6 +24,9 @@ function envWithOpenDoor(
     current_status: 'OPEN',
     state_since: createdAt,
     updated_at: createdAt,
+    alerts_enabled: alertsEnabled ? 1 : 0,
+    notify_after_minutes: 60,
+    reminder_interval_minutes: null,
   });
   extraState?.(state);
   return {
@@ -41,6 +47,7 @@ describe('alerts', () => {
         Promise.resolve({
           ok: true,
           status: 200,
+          text: async () => 'ok',
         }),
       ),
     );
@@ -58,7 +65,17 @@ describe('alerts', () => {
     ]);
   });
 
-  it('sends alert when door has been open past threshold', async () => {
+  it('skips doors with alerts disabled', async () => {
+    const { env } = envWithOpenDoor('2020-01-01T00:00:00.000Z', undefined, false);
+    const results = await runOpenDoorAlerts(env, {
+      config: sampleConfig,
+      nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(results[0].skippedReason).toContain('disabled');
+  });
+
+  it('sends alert when door has been open past per-door threshold', async () => {
     const { env } = envWithOpenDoor('2020-01-01T00:00:00.000Z');
     const results = await runOpenDoorAlerts(env, {
       config: sampleConfig,
@@ -88,8 +105,9 @@ describe('alerts', () => {
     expect(state.alert_state.has('garage-left')).toBe(true);
   });
 
-  it('sends a reminder after reminderMinutes', async () => {
+  it('sends a reminder after per-door reminder interval', async () => {
     const { env } = envWithOpenDoor('2020-01-01T00:00:00.000Z', (state) => {
+      state.doors.get('garage-left')!.reminder_interval_minutes = 30;
       state.alert_state.set('garage-left', {
         door_id: 'garage-left',
         open_since: '2020-01-01T00:00:00.000Z',
@@ -98,7 +116,7 @@ describe('alerts', () => {
     });
 
     const results = await runOpenDoorAlerts(env, {
-      config: { ...sampleConfig, reminderMinutes: 30 },
+      config: sampleConfig,
       nowMs: Date.parse('2025-01-01T12:00:00.000Z'),
     });
 
@@ -119,7 +137,15 @@ describe('alerts', () => {
 
   it('sends GET webhook with query params and redirect:manual', async () => {
     await sendWebhook(
-      { webhookUrl: 'https://ntfy.sh/topic', thresholdMinutes: 60, method: 'GET' },
+      {
+        webhookUrl: 'https://ntfy.sh/topic',
+        method: 'GET',
+        contentType: 'application/json',
+        arguments: [
+          { key: 'door', value: '{{door}}' },
+          { key: 'state', value: '{{state}}' },
+        ],
+      },
       {
         title: 'Garage Door Alert',
         message: 'Door open',
@@ -127,6 +153,7 @@ describe('alerts', () => {
         state: 'OPEN',
         durationMs: 1000,
         durationText: '1 min',
+        timestamp: '2025-01-01T12:00:00.000Z',
       },
     );
 
@@ -141,6 +168,7 @@ describe('alerts', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.sent).toBe(true);
     expect(result.payload?.door).toBe('Garage Door Left');
+    expect(result.responseBody).toBe('ok');
   });
 
   it('returns a generic error instead of raw fetch exceptions', async () => {
@@ -162,6 +190,7 @@ describe('alerts', () => {
         Promise.resolve({
           ok: false,
           status: 302,
+          text: async () => '',
         }),
       ),
     );
@@ -193,6 +222,9 @@ describe('alerts', () => {
       current_status: 'OPEN',
       state_since: '2025-01-01T12:30:00.000Z',
       updated_at: '2025-01-01T12:30:00.000Z',
+      alerts_enabled: 1,
+      notify_after_minutes: 60,
+      reminder_interval_minutes: null,
     });
 
     const afterReopen = await runOpenDoorAlerts(env, {

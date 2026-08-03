@@ -6,7 +6,10 @@ import {
   saveAlertConfig,
   resolveAlertConfigFromBody,
   toPublicAlertConfig,
+  updateDoorAlertSettings,
+  listDoorAlertSettings,
 } from '../src/alert-config';
+import { DEFAULT_WEBHOOK_ARGUMENTS } from '../src/webhook-payload';
 import { createMockD1 } from './mock-d1';
 
 describe('alert-config', () => {
@@ -14,39 +17,37 @@ describe('alert-config', () => {
     expect(
       validateAlertConfig({
         webhookUrl: 'https://ntfy.sh/my-topic',
-        thresholdMinutes: 30,
         method: 'GET',
+        contentType: 'application/json',
+        arguments: [{ key: 'door', value: '{{door}}' }],
       }),
     ).toEqual({
       webhookUrl: 'https://ntfy.sh/my-topic',
-      thresholdMinutes: 30,
       method: 'GET',
+      contentType: 'application/json',
+      arguments: [{ key: 'door', value: '{{door}}' }],
     });
   });
 
-  it('rejects invalid webhook URLs and thresholds', () => {
-    expect(
-      validateAlertConfig({ webhookUrl: '', thresholdMinutes: 60, method: 'POST' }),
-    ).toBeNull();
+  it('rejects invalid webhook URLs and content types', () => {
+    expect(validateAlertConfig({ webhookUrl: '', method: 'POST' })).toBeNull();
     expect(
       validateAlertConfig({
         webhookUrl: 'http://example.com',
-        thresholdMinutes: 60,
         method: 'POST',
       }),
     ).toBeNull();
     expect(
       validateAlertConfig({
         webhookUrl: 'https://127.0.0.1/hook',
-        thresholdMinutes: 60,
         method: 'POST',
       }),
     ).toBeNull();
     expect(
       validateAlertConfig({
         webhookUrl: 'https://example.com',
-        thresholdMinutes: 0,
         method: 'POST',
+        contentType: 'text/xml',
       }),
     ).toBeNull();
   });
@@ -59,84 +60,56 @@ describe('alert-config', () => {
 
     await saveAlertConfig(env, {
       webhookUrl: 'https://example.com/webhook',
-      thresholdMinutes: 45,
       method: 'POST',
+      contentType: 'application/json',
+      arguments: DEFAULT_WEBHOOK_ARGUMENTS,
     });
 
-    expect(await getAlertConfig(env)).toEqual({
+    const loaded = await getAlertConfig(env);
+    expect(loaded).toMatchObject({
       webhookUrl: 'https://example.com/webhook',
-      thresholdMinutes: 45,
       method: 'POST',
+      contentType: 'application/json',
     });
+    expect(loaded?.arguments.length).toBeGreaterThan(0);
   });
 
   it('resolves request body over saved config and keeps saved URL when omitted', () => {
     const saved = {
       webhookUrl: 'https://saved.example/webhook',
-      thresholdMinutes: 60,
       method: 'POST' as const,
+      contentType: 'application/json' as const,
+      arguments: DEFAULT_WEBHOOK_ARGUMENTS,
     };
 
     expect(
       resolveAlertConfigFromBody({ webhookUrl: 'https://test.example/hook', method: 'GET' }, saved),
-    ).toEqual({
+    ).toMatchObject({
       webhookUrl: 'https://test.example/hook',
-      thresholdMinutes: 60,
       method: 'GET',
     });
 
-    expect(resolveAlertConfigFromBody({ thresholdMinutes: 90, method: 'POST' }, saved)).toEqual({
+    expect(resolveAlertConfigFromBody({ method: 'POST' }, saved)).toMatchObject({
       webhookUrl: 'https://saved.example/webhook',
-      thresholdMinutes: 90,
       method: 'POST',
     });
   });
 
-  it('rejects invalid reminderMinutes and accepts string threshold/reminder', () => {
+  it('rejects invalid argument lists', () => {
     expect(
       validateAlertConfig({
         webhookUrl: 'https://example.com/hook',
-        thresholdMinutes: '30',
         method: 'POST',
-        reminderMinutes: 'abc',
+        arguments: [{ key: '', value: 'x' }],
       }),
     ).toBeNull();
     expect(
       validateAlertConfig({
         webhookUrl: 'https://example.com/hook',
-        thresholdMinutes: '45',
         method: 'POST',
-        reminderMinutes: '0',
+        arguments: 'not-json',
       }),
-    ).toEqual({
-      webhookUrl: 'https://example.com/hook',
-      thresholdMinutes: 45,
-      method: 'POST',
-    });
-    expect(
-      validateAlertConfig({
-        webhookUrl: 'https://example.com/hook',
-        thresholdMinutes: 60,
-        method: 'POST',
-        reminderMinutes: 15,
-      }),
-    ).toMatchObject({ reminderMinutes: 15 });
-  });
-
-  it('saves and loads alert config from D1', async () => {
-    const { mockDb } = createMockD1();
-    const env: any = { GARAGE_DB: mockDb };
-    await saveAlertConfig(env, {
-      webhookUrl: 'https://ntfy.sh/topic',
-      thresholdMinutes: 45,
-      method: 'GET',
-    });
-    const loaded = await getAlertConfig(env);
-    expect(loaded).toMatchObject({
-      webhookUrl: 'https://ntfy.sh/topic',
-      thresholdMinutes: 45,
-      method: 'GET',
-    });
+    ).toBeNull();
   });
 
   it('throws when saving invalid alert config', async () => {
@@ -149,5 +122,39 @@ describe('alert-config', () => {
 
   it('returns null from toPublicAlertConfig when config is missing', () => {
     expect(toPublicAlertConfig(null)).toBeNull();
+  });
+
+  it('updates per-door alert settings', async () => {
+    const { mockDb, state } = createMockD1();
+    state.doors.set('garage-left', {
+      id: 'garage-left',
+      name: 'Garage Door Left',
+      current_status: 'CLOSED',
+      state_since: '2025-01-01T00:00:00.000Z',
+      updated_at: '2025-01-01T00:00:00.000Z',
+      alerts_enabled: 0,
+      notify_after_minutes: 30,
+      reminder_interval_minutes: null,
+    });
+    const env: any = {
+      GARAGE_DB: mockDb,
+      GARAGE_DOORS: { 'Garage Door Left': 'garage-left' },
+    };
+
+    const updated = await updateDoorAlertSettings(env, 'garage-left', {
+      alertsEnabled: true,
+      notifyAfterMinutes: 10,
+      reminderIntervalMinutes: 15,
+    });
+    expect(updated).toMatchObject({
+      doorId: 'garage-left',
+      alertsEnabled: true,
+      notifyAfterMinutes: 10,
+      reminderIntervalMinutes: 15,
+    });
+
+    const listed = await listDoorAlertSettings(env);
+    expect(listed[0].alertsEnabled).toBe(true);
+    expect(listed[0].notifyAfterMinutes).toBe(10);
   });
 });
