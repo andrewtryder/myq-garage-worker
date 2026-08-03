@@ -232,7 +232,6 @@ describe('myq-garage-worker integration tests', () => {
       const olderAt = new Date(Date.now() - 90 * 60 * 1000); // 90m ago
       // RFC 5322 Date has second precision; ordering uses the parsed ISO.
       const newerIso = new Date(newerAt.toUTCString()).toISOString();
-      const olderIso = new Date(olderAt.toUTCString()).toISOString();
 
       const newer: any = {
         from: 'notification@myq.com',
