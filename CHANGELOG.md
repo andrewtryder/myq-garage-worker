@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.2.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.1.0...myq-garage-worker-v1.2.0) (2026-08-03)
+
+
+### Features
+
+* add stale detection, health endpoint, and confidence dashboard ([adf46c0](https://github.com/andrewtryder/myq-garage-worker/commit/adf46c001d4bf95b9cb80fb886a7f4e4fddf132e))
+* dashboard confidence (stale, health, refresh) ([a1f6109](https://github.com/andrewtryder/myq-garage-worker/commit/a1f610930c300fda5b41b76f8519b27376fe30c6))
+* order door state by trusted email Date within skew ([9761e6f](https://github.com/andrewtryder/myq-garage-worker/commit/9761e6faf2acc87cbb10a6d65efb3dc42baad32a))
+* order door state by trusted email Date within skew ([65e4155](https://github.com/andrewtryder/myq-garage-worker/commit/65e4155f801ebab01172153258c919cf1037db44))
+
+
+### Bug Fixes
+
+* accept Gmail-forwarded myQ mail via ALLOWED_FORWARD_FROM ([aff5fb1](https://github.com/andrewtryder/myq-garage-worker/commit/aff5fb13501ae58d89c7b8957ceecda019f26f2b))
+* accept Gmail-forwarded myQ mail via ALLOWED_FORWARD_FROM ([2c00fdd](https://github.com/andrewtryder/myq-garage-worker/commit/2c00fdd8b1e8649381db4be34d206b0dd01ca09f))
+* broaden Gmail forward matching and latch write_id ([0640edb](https://github.com/andrewtryder/myq-garage-worker/commit/0640edbd8f4c42ea2220a1d5cca223d6c71e5c2c))
+* broaden Gmail forward matching and latch write_id ([9f2975e](https://github.com/andrewtryder/myq-garage-worker/commit/9f2975e5b2bae0ff2cf30ebaeba4facf16668cea))
+* condition latch clear on applied writes and surface applied state ([575292a](https://github.com/andrewtryder/myq-garage-worker/commit/575292a3b5db31413a8a7775abd8f9fcb83ae42a))
+* drop unused olderIso in chronology test ([4a17407](https://github.com/andrewtryder/myq-garage-worker/commit/4a174074d2668298d50add1477eb88cc79b79038))
+* harden D1 writes, stale detection, and deploy migrations ([74bafa9](https://github.com/andrewtryder/myq-garage-worker/commit/74bafa9156efb5678fd2c2bbe434caa93bdb36f5))
+* log rejected email envelope and accept rewritten Gmail From ([9de06e8](https://github.com/andrewtryder/myq-garage-worker/commit/9de06e814be07284f86ae07f7ac0e0982903f34c))
+* log rejected email envelope for Gmail forward tuning ([94aeb66](https://github.com/andrewtryder/myq-garage-worker/commit/94aeb66cb55e9fd0b37b61d3118170c2c55f5bb4))
+* remove useless updateIndex initializer for eslint ([f9c1f7c](https://github.com/andrewtryder/myq-garage-worker/commit/f9c1f7cbe43f7a7efd16eac1222e6141ec264772))
+* require received_at in Message-ID update EXISTS gate ([c395ad3](https://github.com/andrewtryder/myq-garage-worker/commit/c395ad315babee516296c262a4972004e133f894))
+* unblock CI after PR [#45](https://github.com/andrewtryder/myq-garage-worker/issues/45) format failures ([ba2c4f4](https://github.com/andrewtryder/myq-garage-worker/commit/ba2c4f4064435a03db2fa372124e81693f73f42b))
+* unblock CI with prettier and clearer email_ok detail ([856016c](https://github.com/andrewtryder/myq-garage-worker/commit/856016cbe55033b15a0608f1caa89fc002803352))
+
 ## [1.1.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.0.1...myq-garage-worker-v1.1.0) (2026-07-27)
 
 ### Features
