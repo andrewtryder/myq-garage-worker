@@ -1,4 +1,5 @@
 import { apiFetch, escapeHtml, formatRelativeTime, statusClass } from './api';
+import { icons } from './icons';
 
 interface DashboardDoor {
   id: string;
@@ -10,6 +11,9 @@ interface DashboardDoor {
   lastEmailAt: string | null;
   lastEventAt: string | null;
   stale: boolean;
+  alertsEnabled: boolean;
+  notifyAfterMinutes: number;
+  reminderIntervalMinutes: number | null;
 }
 
 interface DashboardEvent {
@@ -35,25 +39,19 @@ interface DashboardResponse {
 
 const REFRESH_MS = 45_000;
 
-function statusIcon(status: string): string {
-  switch (status) {
-    case 'OPEN':
-      return '!';
-    case 'CLOSED':
-      return '✓';
-    case 'STOPPED':
-      return '◼';
-    default:
-      return '?';
-  }
-}
-
 function durationLabel(door: DashboardDoor): string {
   const status = door.status.toUpperCase();
   if (!door.durationText) return 'No timestamp recorded';
-  if (status === 'OPEN') return `Open for ${door.durationText}`;
+  if (status === 'OPEN') return `Open ${door.durationText}`;
   if (status === 'CLOSED') return `Closed ${door.durationText} ago`;
-  return `${status} for ${door.durationText}`;
+  return `${status} ${door.durationText}`;
+}
+
+function alertSummary(door: DashboardDoor): string {
+  if (!door.alertsEnabled) return 'Alerts off';
+  const notify = `notifies after ${door.notifyAfterMinutes}m`;
+  if (!door.reminderIntervalMinutes) return `${notify}, once`;
+  return `${notify}, reminds every ${door.reminderIntervalMinutes}m`;
 }
 
 function emailAgeLabel(iso: string | null | undefined): string {
@@ -114,6 +112,13 @@ function renderStaleBanner(data: DashboardResponse): string {
   return `Status confidence is stale for ${nameList}. ${perDoor}`;
 }
 
+function pillIcon(status: string, stale: boolean): string {
+  if (stale) return icons.warning();
+  if (status === 'CLOSED') return icons.check();
+  if (status === 'OPEN') return icons.arrowUp();
+  return icons.door();
+}
+
 function renderDoors(doors: DashboardDoor[]): string {
   if (doors.length === 0) {
     return '<p class="empty">No doors configured.</p>';
@@ -129,17 +134,30 @@ function renderDoors(doors: DashboardDoor[]): string {
     .map((door) => {
       const status = door.status.toUpperCase() || 'UNKNOWN';
       const open = status === 'OPEN';
+      const pillClass = door.stale ? 'status-stale' : statusClass(status);
+      const alertClass = door.alertsEnabled ? 'door-alert-on' : 'door-alert-off';
       return `
         <article class="door ${open ? 'door-open' : ''} ${door.stale ? 'door-stale' : ''}">
           <div class="door-header">
-            <h3 class="door-name">${escapeHtml(door.name)}</h3>
-            <p class="door-status ${statusClass(status)}" aria-label="Status ${escapeHtml(status)}">
-              <span class="door-icon" aria-hidden="true">${statusIcon(status)}</span>
+            <div class="door-title">
+              ${icons.door()}
+              <h3 class="door-name">${escapeHtml(door.name)}</h3>
+            </div>
+            <span class="status-pill ${pillClass}" aria-label="Status ${escapeHtml(status)}">
+              ${pillIcon(status, door.stale)}
               <span>${escapeHtml(status)}</span>
-            </p>
+            </span>
           </div>
           <p class="door-duration">${escapeHtml(durationLabel(door))}</p>
-          ${door.stale ? '<p class="door-stale-note">No recent notification for this door</p>' : ''}
+          <p class="door-alert-line ${alertClass}">
+            ${door.alertsEnabled ? icons.bell() : icons.bellOff()}
+            <span>${escapeHtml(alertSummary(door))}</span>
+          </p>
+          ${
+            door.stale
+              ? `<p class="door-stale-note">${icons.warning()}<span>No recent notification for this door</span></p>`
+              : ''
+          }
         </article>`;
     })
     .join('');
@@ -154,13 +172,18 @@ function renderTimeline(events: DashboardEvent[]): string {
     .map((event) => {
       const status = (event.status || '').toUpperCase();
       const relative = formatRelativeTime(event.createdAt).replace(/^\(|\)$/g, '');
-      const action =
-        status === 'OPEN' ? 'opened' : status === 'CLOSED' ? 'closed' : status.toLowerCase();
+      const iconClass = status === 'OPEN' ? 'open' : status === 'CLOSED' ? 'closed' : 'other';
+      const icon =
+        status === 'OPEN'
+          ? icons.arrowUp()
+          : status === 'CLOSED'
+            ? icons.arrowDown()
+            : icons.door();
       return `
         <div class="timeline-item">
           <div class="timeline-main">
+            <span class="timeline-icon ${iconClass}">${icon}</span>
             <span class="timeline-door">${escapeHtml(event.doorName)}</span>
-            <span class="timeline-action action-${statusClass(status).replace('status-', '')}">${escapeHtml(action)}</span>
           </div>
           <div class="timeline-time">${escapeHtml(relative || event.createdAt)}</div>
         </div>`;

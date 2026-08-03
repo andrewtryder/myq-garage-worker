@@ -3,6 +3,7 @@ import { DoorStatus, Env } from './types';
 import { loadAllDoors } from './doors';
 import { formatDuration } from './format';
 import { getLatestEmailAtForDoor } from './storage';
+import { getDoorAlertSettings } from './alert-config';
 
 export interface DashboardDoor {
   id: string;
@@ -14,6 +15,9 @@ export interface DashboardDoor {
   lastEmailAt: string | null;
   lastEventAt: string | null;
   stale: boolean;
+  alertsEnabled: boolean;
+  notifyAfterMinutes: number;
+  reminderIntervalMinutes: number | null;
 }
 
 export interface DashboardEvent {
@@ -96,6 +100,7 @@ export async function buildDashboard(env: Env, nowMs = Date.now()): Promise<Dash
 
       const lastEmailAt = await getLatestEmailAtForDoor(env, door.key);
       const lastEventAt = door.history[0]?.createdAt || door.state.createdAt || null;
+      const alertSettings = await getDoorAlertSettings(env, door.key);
 
       return {
         id: door.key,
@@ -107,6 +112,9 @@ export async function buildDashboard(env: Env, nowMs = Date.now()): Promise<Dash
         lastEmailAt,
         lastEventAt,
         stale: isStaleAt(lastEmailAt, nowMs, staleAfterHours),
+        alertsEnabled: alertSettings?.alertsEnabled ?? false,
+        notifyAfterMinutes: alertSettings?.notifyAfterMinutes ?? 30,
+        reminderIntervalMinutes: alertSettings?.reminderIntervalMinutes ?? null,
       };
     }),
   );

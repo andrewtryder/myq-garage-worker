@@ -54,7 +54,9 @@ export function createMockD1(state = createState()) {
       let changes = 0;
 
       if (normalized.startsWith('INSERT INTO doors')) {
-        const [id, name, updatedAt] = bound as string[];
+        const id = String(bound[0]);
+        const name = String(bound[1]);
+        const updatedAt = String(bound[2]);
         const existing = state.doors.get(id);
         if (existing) {
           existing.name = name;
@@ -65,9 +67,46 @@ export function createMockD1(state = createState()) {
             current_status: 'UNKNOWN',
             state_since: null,
             updated_at: updatedAt,
+            alerts_enabled: 0,
+            notify_after_minutes: 30,
+            reminder_interval_minutes: null,
           });
         }
         changes = 1;
+      } else if (normalized.startsWith('UPDATE doors') && normalized.includes('alerts_enabled')) {
+        const alertsEnabled = Number(bound[0]);
+        const notifyAfter = Number(bound[1]);
+        const reminder = bound[2] as number | null;
+        const id = String(bound[3]);
+        const door = state.doors.get(id);
+        if (door) {
+          door.alerts_enabled = alertsEnabled;
+          door.notify_after_minutes = notifyAfter;
+          door.reminder_interval_minutes = reminder;
+          changes = 1;
+        }
+      } else if (normalized.startsWith('UPDATE doors')) {
+        const status = String(bound[0]);
+        const stateSince = bound[1] as string | null;
+        const updatedAt = String(bound[2]);
+        const id = String(bound[3]);
+        const eventTime = String(bound[4]);
+        const door = state.doors.get(id);
+        if (door) {
+          const currentUpdated = door.updated_at == null ? null : String(door.updated_at);
+          const chronologyOk = currentUpdated === null || currentUpdated <= eventTime;
+          let existsOk = true;
+          if (normalized.includes('EXISTS')) {
+            const writeId = String(bound[5]);
+            existsOk = state.door_events.some((event) => String(event.write_id ?? '') === writeId);
+          }
+          if (chronologyOk && existsOk) {
+            door.current_status = status;
+            door.state_since = stateSince;
+            door.updated_at = updatedAt;
+            changes = 1;
+          }
+        }
       } else if (normalized.startsWith('INSERT OR IGNORE INTO door_events')) {
         const doorId = String(bound[0]);
         const status = String(bound[1]);
@@ -112,28 +151,6 @@ export function createMockD1(state = createState()) {
           write_id: writeId,
         });
         changes = 1;
-      } else if (normalized.startsWith('UPDATE doors')) {
-        const status = String(bound[0]);
-        const stateSince = bound[1] as string | null;
-        const updatedAt = String(bound[2]);
-        const id = String(bound[3]);
-        const eventTime = String(bound[4]);
-        const door = state.doors.get(id);
-        if (door) {
-          const currentUpdated = door.updated_at == null ? null : String(door.updated_at);
-          const chronologyOk = currentUpdated === null || currentUpdated <= eventTime;
-          let existsOk = true;
-          if (normalized.includes('EXISTS')) {
-            const writeId = String(bound[5]);
-            existsOk = state.door_events.some((event) => String(event.write_id ?? '') === writeId);
-          }
-          if (chronologyOk && existsOk) {
-            door.current_status = status;
-            door.state_since = stateSince;
-            door.updated_at = updatedAt;
-            changes = 1;
-          }
-        }
       } else if (normalized.startsWith('DELETE FROM alert_state')) {
         const doorId = String(bound[0]);
         if (normalized.includes('EXISTS')) {
@@ -156,18 +173,29 @@ export function createMockD1(state = createState()) {
         });
         changes = 1;
       } else if (normalized.startsWith('INSERT INTO alert_config')) {
-        const [webhookUrl, threshold, reminder, method, updatedAt] = bound as [
-          string,
-          number,
-          number | null,
-          string,
-          string,
-        ];
+        const webhookUrl = String(bound[0]);
+        const threshold = Number(bound[1]);
+        const reminder = bound[2] as number | null;
+        const method = String(bound[3]);
+        // New shape: content_type, arguments_json, updated_at
+        // Old shape: updated_at only after method
+        let contentType = 'application/json';
+        let argumentsJson = '[]';
+        let updatedAt: string;
+        if (bound.length >= 7) {
+          contentType = String(bound[4]);
+          argumentsJson = String(bound[5]);
+          updatedAt = String(bound[6]);
+        } else {
+          updatedAt = String(bound[4]);
+        }
         state.alert_config = {
           webhook_url: webhookUrl,
           threshold_minutes: threshold,
           reminder_minutes: reminder,
           method,
+          content_type: contentType,
+          arguments_json: argumentsJson,
           updated_at: updatedAt,
         };
         changes = 1;
@@ -311,11 +339,30 @@ export function createMockD1(state = createState()) {
             state_since: door.state_since,
           } as T;
         }
+        if (
+          normalized.includes('alerts_enabled') &&
+          normalized.includes('notify_after_minutes') &&
+          normalized.includes('FROM doors')
+        ) {
+          const door = state.doors.get(String(bound[0]));
+          if (!door) return null;
+          return {
+            alerts_enabled: Number(door.alerts_enabled ?? 0),
+            notify_after_minutes: Number(door.notify_after_minutes ?? 30),
+            reminder_interval_minutes:
+              door.reminder_interval_minutes == null
+                ? null
+                : Number(door.reminder_interval_minutes),
+          } as T;
+        }
         if (normalized.startsWith('SELECT open_since, last_alert_sent_at FROM alert_state')) {
           const latch = state.alert_state.get(String(bound[0]));
           return (latch as T) ?? null;
         }
-        if (normalized.startsWith('SELECT webhook_url, threshold_minutes')) {
+        if (
+          normalized.includes('FROM alert_config') ||
+          normalized.startsWith('SELECT webhook_url')
+        ) {
           return (state.alert_config as T) ?? null;
         }
         if (
