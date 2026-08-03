@@ -1,12 +1,7 @@
 import { Env } from './types';
 
 export type OpsEventKind =
-  | 'email_ok'
-  | 'email_reject'
-  | 'door_change'
-  | 'cron_alerts'
-  | 'webhook_ok'
-  | 'webhook_fail';
+  'email_ok' | 'email_reject' | 'door_change' | 'cron_alerts' | 'webhook_ok' | 'webhook_fail';
 
 export const OPS_RETENTION_DAYS = 30;
 
