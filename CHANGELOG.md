@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.3.0...myq-garage-worker-v1.3.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **email-parser:** prevent polynomial ReDoS in SRS and subject regexes ([#79](https://github.com/andrewtryder/myq-garage-worker/issues/79)) ([0d76763](https://github.com/andrewtryder/myq-garage-worker/commit/0d7676308484cdb75a4752ef6b486eed9f6d41c1))
+
 ## [1.3.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.2.1...myq-garage-worker-v1.3.0) (2026-08-30)
 
 
