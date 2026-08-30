@@ -65,7 +65,8 @@ export function normalizeMaybeAddress(raw: string | null | undefined): string | 
   const trimmed = raw.trim();
 
   // SRS0=HHH=TT=domain=local@forwarder-host
-  const srs = trimmed.match(/SRS0=[^=\s]+=[^=\s]+=([^=\s]+)=([^@\s]+)@/i);
+  // Note: each segment is anchored to non-= non-space chars without nesting to avoid ReDoS.
+  const srs = trimmed.match(/^SRS0=[^=\s]{1,256}=[^=\s]{1,32}=([^=@\s]{1,253})=([^=@\s]{1,64})@/i);
   if (srs) {
     return normalizeEnvelopeAddress(`${srs[2]}@${srs[1]}`);
   }
@@ -152,17 +153,33 @@ export function hasFailedEmailAuthentication(authenticationResults: string | nul
 }
 
 export function parseMyQSubject(subject: string): MyQParsedSubject | null {
-  const pattern = /myq notification:\s*(.+?)\s+(?:just\s+)?(opened|closed|stopped)/i;
-  const match = subject.match(pattern);
+  // Avoid lazy quantifiers interacting with \s+ which causes polynomial ReDoS.
+  // Two-step approach:
+  //   1. Verify the "myq notification:" prefix with a simple anchored check (no captures).
+  //   2. Scan the remainder from the right for the last action keyword, so we
+  //      never rely on a wildcard .+? to find a trailing boundary.
+  const prefix = /^myq notification:\s*/i;
+  const prefixMatch = prefix.exec(subject);
+  if (!prefixMatch) return null;
 
-  if (!match) {
-    return null;
+  const body = subject.slice(prefixMatch[0].length);
+  if (!body) return null;
+
+  // Search for the rightmost action keyword preceded by optional "just"
+  const actions = ['opened', 'closed', 'stopped'] as const;
+  for (const action of actions) {
+    // Match " just <action>" or " <action>" at the end (case-insensitive, no backtracking)
+    const suffix = new RegExp(`\\s+(?:just\\s+)?${action}\\s*$`, 'i');
+    const suffixMatch = suffix.exec(body);
+    if (suffixMatch) {
+      const deviceName = body.slice(0, suffixMatch.index).trim();
+      if (deviceName) {
+        return { deviceName, action };
+      }
+    }
   }
 
-  return {
-    deviceName: match[1],
-    action: match[2].toLowerCase(),
-  };
+  return null;
 }
 
 // Global cache for resolving garage doors to avoid repetitive JSON parsing and string lowercasing
