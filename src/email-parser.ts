@@ -65,7 +65,8 @@ export function normalizeMaybeAddress(raw: string | null | undefined): string | 
   const trimmed = raw.trim();
 
   // SRS0=HHH=TT=domain=local@forwarder-host
-  const srs = trimmed.match(/SRS0=[^=\s]+=[^=\s]+=([^=\s]+)=([^@\s]+)@/i);
+  // Note: each segment is anchored to non-= non-space chars without nesting to avoid ReDoS.
+  const srs = trimmed.match(/^SRS0=[^=\s]{1,256}=[^=\s]{1,32}=([^=@\s]{1,253})=([^=@\s]{1,64})@/i);
   if (srs) {
     return normalizeEnvelopeAddress(`${srs[2]}@${srs[1]}`);
   }
@@ -152,7 +153,10 @@ export function hasFailedEmailAuthentication(authenticationResults: string | nul
 }
 
 export function parseMyQSubject(subject: string): MyQParsedSubject | null {
-  const pattern = /myq notification:\s*(.+?)\s+(?:just\s+)?(opened|closed|stopped)/i;
+  // Device name must start with a non-space char so `\S.*?` cannot expand into
+  // trailing whitespace — prevents polynomial backtracking on strings like
+  // "myq notification:a       " with no valid action word.
+  const pattern = /myq notification:\s*(\S.*?)\s+(?:just\s+)?(opened|closed|stopped)/i;
   const match = subject.match(pattern);
 
   if (!match) {
