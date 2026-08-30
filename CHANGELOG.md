@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.2.1...myq-garage-worker-v1.3.0) (2026-08-30)
+
+
+### Features
+
+* redesign UI with per-door alerts and flexible webhooks ([ac7be42](https://github.com/andrewtryder/myq-garage-worker/commit/ac7be42580fdc90521ce3251eaeb32b6f10c3393))
+* redesign UI with per-door alerts and flexible webhooks ([a41eaeb](https://github.com/andrewtryder/myq-garage-worker/commit/a41eaeb5e41f52cdbb300a32fb12006eda8be20f))
+
+
+### Bug Fixes
+
+* list door alerts as rows with dedicated save ([18ba0c2](https://github.com/andrewtryder/myq-garage-worker/commit/18ba0c2d8725e364cf30fac33bf7440755999fed))
+* list door alerts as rows with dedicated save ([e3e721a](https://github.com/andrewtryder/myq-garage-worker/commit/e3e721afa88dd6574d128465f6ad351060662e6a))
+
 ## [1.2.1](https://github.com/andrewtryder/myq-garage-worker/compare/myq-garage-worker-v1.2.0...myq-garage-worker-v1.2.1) (2026-08-03)
 
 ### Bug Fixes
