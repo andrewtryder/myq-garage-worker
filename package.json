@@ -55,7 +55,7 @@
     "typescript-eslint": "^8.60.1",
     "vite": "^7.3.6",
     "vitest": "^4.1.9",
-    "wrangler": "^4.115.0"
+    "wrangler": "^4.127.1"
   },
   "lint-staged": {
     "*.{js,ts}": [
