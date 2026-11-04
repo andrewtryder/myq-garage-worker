@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **Archived:** This project is no longer maintained. We now use [bvdcode/home-assistant-myq](https://github.com/bvdcode/home-assistant-myq) as our myQ solution.
+
 # myq-garage-worker
 
 [![Deploy Worker](https://github.com/andrewtryder/myq-garage-worker/actions/workflows/deploy.yml/badge.svg)](https://github.com/andrewtryder/myq-garage-worker/actions/workflows/deploy.yml)
